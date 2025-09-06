@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using BetterErProspecting.Helper;
+using BetterErProspecting.Interface;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
+using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 using Vintagestory.API.Util;
@@ -143,6 +146,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		return true;
 	}
 
+	// Modded Density amount-based search. Square with chunkSize radius around current block. Whole mapheight
 	protected virtual void ModProbeDensityMode(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
 		damage = 1;
 
@@ -150,16 +154,6 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			base.ProbeBlockDensityMode(world, byEntity, itemslot, blockSel);
 			return;
 		}
-
-		// Modded Density amount-based search. Radius based but whole Y chunk range
-		// Make configurable ? Value based on the wiki strategy suggestion of 40 blocks, thus the radius is 20 because 41 = 20 * 2 obviously
-		damage = 3;
-		int radius = 20;
-		String[] blacklistedBlocks = ["flint", "silver", "quartz"];
-
-		// Should be good enough
-		int searchStart = Math.Max(TerraGenConfig.seaLevel + 20, blockSel.Position.Y + 20);
-
 
 		IPlayer? byPlayer = null;
 		if (byEntity is EntityPlayer)
@@ -177,89 +171,59 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		if (serverPlayer == null)
 			return;
 
+		damage = 3;
+		int chunkSize = GlobalConstants.ChunkSize;
+		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockSel.Position);
+		int chunkBlocks = chunkSize * chunkSize * mapHeight;
+		String[] blacklistedBlocks = ["flint", "silver", "quartz"];
 
-		// TODO: Try to calculate the values and insert into the prospecting map manually. Kinda harder, will try another approach but leaving this here
-		List<EnumBlockMaterial> countableMaterials = new List<EnumBlockMaterial>() { EnumBlockMaterial.Ore, EnumBlockMaterial.Stone, EnumBlockMaterial.Sand, EnumBlockMaterial.Gravel };
-		Dictionary<string, int> quantityFound = new Dictionary<string, int>();
-		int countedBlocks = 0; // Specifically geological ones. Maybe add another material ?
+
+		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
+		Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre = new();
 
 		BlockPos blockPos = blockSel.Position.Copy();
-
-		api.World.BlockAccessor.WalkBlocks(
-			new BlockPos(blockPos.X - radius, searchStart, blockPos.Z - radius),
-			new BlockPos(blockPos.X + radius, 0, blockPos.Z + radius),
-		delegate (Block nblock, int x, int y, int z) {
-
-			if (countableMaterials.Contains(nblock.BlockMaterial)) {
-				countedBlocks += 1;
-			}
+		api.World.BlockAccessor.WalkBlocks(new BlockPos(blockPos.X - chunkSize, mapHeight, blockPos.Z - chunkSize), new BlockPos(blockPos.X + chunkSize, 0, blockPos.Z + chunkSize), delegate (Block nblock, int x, int y, int z) {
 
 			// Special case because of course halite is a rock
 			if (nblock.Code.Path.Contains("halite")) {
-				int value = 0;
-				quantityFound.TryGetValue("halite", out value);
-				quantityFound["halite"] = value + 1;
+				(int Count, string OriginalKey) entry = codeToFoundOre.GetValueOrDefault("halite", (0, "halite"));
+				codeToFoundOre["halite"] = (entry.Count + 1, nblock.Code.Path);
 			}
 
-
 			if (nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
-				string key = nblock.Variant["type"];
-
-				key = ConvertChildRocks(key);
+				string originalKey = nblock.Variant["type"];
+				string key = ConvertChildRocks(originalKey);
 
 				if (!blacklistedBlocks.Contains(key)) {
-					int value = 0;
-					quantityFound.TryGetValue(key, out value);
-					quantityFound[key] = value + 1;
+					(int Count, string OriginalKey) entry = codeToFoundOre.GetValueOrDefault(key, (0, originalKey));
+					codeToFoundOre[key] = (entry.Item1 + 1, originalKey);
 				}
-
 			}
 		});
 
-		var propickResults = base.GenProbeResults(world, blockSel.Position);
-		var ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
+		var existingPages = ppws.depositsByCode.Keys.ToList();
+		List<string> missingPageCode = codeToFoundOre.Keys.Where(k => !existingPages.Contains(k)).ToList();
+		missingPageCode.ForEach(k => codeToFoundOre.Remove(k));
 
-		// Remove non-existing ores
-		var keysToRemove = propickResults.OreReadings.Keys.Where(key => !quantityFound.ContainsKey(key)).ToList();
-		if (keysToRemove.Count > 0) {
-			Logger.Debug("[BetterErProspecting] Removing non-existing ores from results: {0}", string.Join(", ", keysToRemove));
-		}
+		if (!generateReadigs(world, ppws, blockPos, codeToFoundOre, out PropickReading readings))
+			return;
 
-		foreach (var key in keysToRemove) { propickResults.OreReadings.Remove(key); }
-
-		// Recalculate ppt based on real numbers ( probably need to expand the list of countable materials )
-		foreach (var kvp in quantityFound) {
-			string oreType = kvp.Key;
-			int foundCount = kvp.Value;
-			double realAndBasedPpt = (double)foundCount / countedBlocks * 1000;
-
-			if (propickResults.OreReadings.TryGetValue(oreType, out var oreReading)) {
-				oreReading.PartsPerThousand = realAndBasedPpt;
-			} else {
-
-				if (ppws.pageCodes.ContainsKey(oreType)) {
-					Logger.Debug("[BetterErProspecting] Found ore in reality that didn't exist in ore readings: {0}, found {1}. Adding with base factor", oreType, foundCount);
-
-					propickResults.OreReadings[oreType] = new OreReading {
-						DepositCode = null, // Not seeing its usage outside of "unknown"
-						TotalFactor = 0.026, // Need to be over 0.025 to be visible. There might be a more clever solution,
-											 // but since low factor usually means low amounts and we found a place where
-											 // the map and the rock factor is garbage, this works out well in the end
-						PartsPerThousand = realAndBasedPpt
-					};
-
-				} else {
-					// Rip easy olivine
-					Logger.Warning("[BetterErProspecting] Counted ore that isn't part of pageCodes. Ignored {0}", oreType);
-				}
+		if (config.DebugMode) {
+			// We want original key because it might have gotten transformed by ConvertChildRocks
+			if (missingPageCode.Count > 0) {
+				var pairs = missingPageCode.Select(k => $"{k}:{codeToFoundOre[k].OriginalKey}");
+				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterErProspecting] Missing page codes (missing in prospectable list): {string.Join(", ", pairs)}"), EnumChatType.Notification);
+				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterErProspecting] Consider reporting to mod developer if you think there's been an error"), EnumChatType.Notification);
 			}
 		}
 
-		var textResults = propickResults.ToHumanReadable(serverPlayer.LanguageCode, ppws.pageCodes);
+
+		var textResults = readings.ToHumanReadable(serverPlayer.LanguageCode, ppws.pageCodes);
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, textResults, EnumChatType.Notification);
-		world.Api.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(propickResults, serverPlayer);
+		world.Api.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(readings, serverPlayer);
 
 	}
+
 
 	// Radius-based search
 	protected virtual void ProbeProximity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
@@ -433,7 +397,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 	public Dictionary<string, string> codeToPageConversion = new Dictionary<string, string>() {
 		{"nativegold", "gold" },
 		{"nativesilver", "silver" },
-		{"peridot-rough", "peridot" }, //uncertain
+		{"peridot", "peridot" }, //spammy
 
 	};
 	// For now a few cases. The conversion is a public method, can extend from there.
@@ -452,6 +416,75 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		}
 
 		return code;
+	}
+
+
+
+	private bool generateReadigs(IWorldAccessor world, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre, out PropickReading readings) {
+
+
+		LCGRandom Rnd = new LCGRandom(api.World.Seed);
+		DepositVariant[] deposits = api.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
+		if (deposits == null) {
+			readings = null;
+			return false;
+
+		}
+
+		int chunkSize = GlobalConstants.ChunkSize;
+		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(pos);
+		int chunkBlocks = chunkSize * chunkSize * mapHeight;
+
+
+		readings = new PropickReading();
+		readings.Position = pos.ToVec3d();
+
+		foreach (var foundOre in codeToFoundOre) {
+			string oreCode = foundOre.Key;
+			int empiricalAmount = foundOre.Value.Count;
+
+
+			var reading = new OreReading();
+			reading.PartsPerThousand = (double)empiricalAmount / chunkBlocks * 1000;
+
+
+			var variant = ppws.depositsByCode[oreCode];
+			var generator = variant.GeneratorInst;
+
+			double totalFactor;
+
+			if (generator is DiscDepositGenerator dGen) {
+				totalFactor = DiscDistributionCalculator.getPercentileOfEmpiricalValue(empiricalAmount, dGen, variant);
+			} else if (generator is IGeneratorPercentileProvider iGen) {
+				totalFactor = ((IGeneratorPercentileProvider)iGen).getPercentileOfEmpiricalValue(empiricalAmount, variant);
+			} else {
+				// Fallback to generic factor. Not entirely accurate but we can't leave it empty either
+
+				IBlockAccessor blockAccess = world.BlockAccessor;
+				int regsize = blockAccess.RegionSize;
+				IMapRegion reg = world.BlockAccessor.GetMapRegion(pos.X / regsize, pos.Z / regsize);
+				int lx = pos.X % regsize;
+				int lz = pos.Z % regsize;
+
+				IntDataMap2D map = reg.OreMaps[oreCode];
+				int noiseSize = map.InnerSize;
+
+				float posXInRegionOre = (float)lx / regsize * noiseSize;
+				float posZInRegionOre = (float)lz / regsize * noiseSize;
+
+				int oreDist = map.GetUnpaddedColorLerped(posXInRegionOre, posZInRegionOre);
+				int[] blockColumn = ppws.GetRockColumn(pos.X, pos.Z);
+
+				ppws.depositsByCode[oreCode].GeneratorInst.GetPropickReading(pos, oreDist, blockColumn, out double fakePpt, out double imaginationLandFactor);
+
+				totalFactor = imaginationLandFactor;
+			}
+
+			reading.TotalFactor = totalFactor;
+			readings.OreReadings[oreCode] = reading;
+		}
+
+		return true;
 	}
 
 	private bool isPropickable(Block block) {

@@ -8,10 +8,13 @@ public class BetterErProspectingModSystem : ModSystem {
 	public static ICoreAPI Api { get; private set; }
 	public static Harmony harmony { get; private set; }
 
+	public enum PatchCategory {
+		NewDensityMode
+	}
 	public override void Start(ICoreAPI api) {
 		api.Logger.Debug("[BetterErProspecting] Starting...");
 
-
+		harmony = new Harmony(Mod.Info.ModID);
 		Api = api;
 		Logger = Mod.Logger;
 
@@ -27,6 +30,10 @@ public class BetterErProspectingModSystem : ModSystem {
 			ModConfig.Instance = new ModConfig();
 		}
 
+		if (ModConfig.Instance.NewDensityMode) {
+			harmony.PatchCategory(nameof(PatchCategory.NewDensityMode));
+		}
+
 		base.Start(api);
 		api.RegisterItemClass("ItemBetterErProspectingPick", typeof(ItemBetterErProspectingPick));
 	}
@@ -39,5 +46,6 @@ public class BetterErProspectingModSystem : ModSystem {
 		Api = null;
 		base.Dispose();
 	}
+
 }
 

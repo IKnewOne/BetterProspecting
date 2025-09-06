@@ -19,4 +19,6 @@ public class ModConfig {
 	public int BoreholeDmg = 2;
 	public bool BoreholeScansOre = true;
 	public bool BoreholeScansStone = false;
+
+	public bool DebugMode = false;
 }

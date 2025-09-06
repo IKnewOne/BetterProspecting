@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -117,6 +117,14 @@
       "comment": "Allows borehole to scan stone",
       "default": false,
       "weight": 4.5
+    },
+    {
+      "code": "DebugMode",
+      "ingui": "Enable Debug Mode",
+      "type": "boolean",
+      "comment": "Enables in-game debug messages",
+      "default": false,
+      "weight": 5.1
     }
   ],
   "formatting": [
