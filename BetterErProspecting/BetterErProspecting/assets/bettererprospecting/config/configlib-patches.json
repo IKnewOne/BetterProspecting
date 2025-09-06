@@ -1,0 +1,149 @@
+{
+  "version": 5,
+  "file": "BetterErProspecting.json",
+  "settings": [
+    {
+      "code": "NewDensityMode",
+      "ingui": "New density mode",
+      "type": "boolean",
+      "comment": "Enables the new density mode. For now, only 20 radius. Doesn't report false positives, reports real PPT. Scans top-bottom of the world(asterisks included)",
+      "default": true,
+      "weight": 1.1
+    },
+    {
+      "code": "NewDensityDmg",
+      "ingui": "Tool damage for new density",
+      "type": "integer",
+      "comment": "",
+      "default": 3,
+      "range": {
+        "min": 1,
+        "max": 10
+      },
+      "weight": 1.2
+    },
+    {
+      "code": "AddProximityMode",
+      "ingui": "Enable Proximity Mode",
+      "type": "boolean",
+      "comment": "Enables proximity mode. Looks for closest ore. Sphere-based",
+      "default": true,
+      "weight": 2.1
+    },
+    {
+      "code": "ProximitySearchRadius",
+      "ingui": "Proximity mode search radius",
+      "type": "integer",
+      "comment": "I'd recommend low values to leave node mode useful (if enabled )",
+      "default": 5,
+      "range": {
+        "min": 1,
+        "max": 10
+      },
+      "weight": 2.2
+    },
+    {
+      "code": "ProximityDmg",
+      "ingui": "Proximity Damage",
+      "type": "integer",
+      "comment": "Tool damage for proximity mode",
+      "default": 2,
+      "range": {
+        "min": 1,
+        "max": 10
+      },
+      "weight": 2.3
+    },
+    {
+      "code": "AddStoneMode",
+      "ingui": "Enable Stone Mode",
+      "type": "boolean",
+      "comment": "Enable big range stone search mode with exact distance to block. Sphere-based",
+      "default": true,
+      "weight": 3.1
+    },
+    {
+      "code": "StoneSearchRadius",
+      "ingui": "Stone search radius",
+      "type": "integer",
+      "comment": "Stone mode search radius",
+      "default": 32,
+      "weight": 3.2
+    },
+    {
+      "code": "StoneDmg",
+      "ingui": "Stone Damage",
+      "type": "integer",
+      "comment": "Tool damage for stone mode",
+      "default": 3,
+      "range": {
+        "min": 1,
+        "max": 10
+      },
+      "weight": 3.3
+    },
+    {
+      "code": "AddBoreHoleMode",
+      "ingui": "Enable Borehole Mode",
+      "type": "boolean",
+      "comment": "A straight-line mode. Only reports when breaking the top of the block, scans the world until the bottom and reports selected blocks ( Any or both of Ore and Stone blocks )",
+      "default": true,
+      "weight": 4.1
+    },
+    {
+      "code": "BoreholeDmg",
+      "ingui": "Borehole Damage",
+      "type": "integer",
+      "comment": "Tool damage for borehole mode",
+      "default": 4,
+      "range": {
+        "min": 1,
+        "max": 10
+      },
+      "weight": 4.2
+    },
+    {
+      "code": "BoreholeScansOre",
+      "ingui": "Borehole Scans Ore",
+      "type": "boolean",
+      "comment": "Allows borehole to scan ore",
+      "default": true,
+      "weight": 4.4
+    },
+    {
+      "code": "BoreholeScansStone",
+      "ingui": "Borehole Scans Stone",
+      "type": "boolean",
+      "comment": "Allows borehole to scan stone",
+      "default": false,
+      "weight": 4.5
+    }
+  ],
+  "formatting": [
+    {
+      "type": "separator",
+      "title": "Density",
+      "weight": 1.0
+    },
+    {
+      "type": "separator",
+      "title": "Proximity",
+      "weight": 2.0
+    },
+    {
+      "type": "separator",
+      "title": "Stone",
+      "weight": 3.0
+    },
+    {
+      "type": "separator",
+      "title": "Borehole",
+      "weight": 4.0
+    },
+    {
+      "type": "text",
+      "text": "At least one must be selected",
+      "weight": 4.3
+    }
+  ]
+}
