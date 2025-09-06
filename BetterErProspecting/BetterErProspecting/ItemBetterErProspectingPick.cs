@@ -175,7 +175,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		int chunkSize = GlobalConstants.ChunkSize;
 		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockSel.Position);
 		int chunkBlocks = chunkSize * chunkSize * mapHeight;
-		String[] blacklistedBlocks = ["flint", "silver", "quartz"];
+		String[] blacklistedBlocks = ["flint", "quartz"];
 
 
 		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
@@ -190,8 +190,13 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 				codeToFoundOre["halite"] = (entry.Count + 1, nblock.Code.Path);
 			}
 
+			if (nblock.Code.Path.Contains("silver")) {
+				var a = 5;
+			}
+
 			if (nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
 				string originalKey = nblock.Variant["type"];
+
 				string key = ConvertChildRocks(originalKey);
 
 				if (!blacklistedBlocks.Contains(key)) {
@@ -207,6 +212,12 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		if (!generateReadigs(world, ppws, blockPos, codeToFoundOre, out PropickReading readings))
 			return;
+
+		if (config.DebugMode) {
+			var droppingReadings = readings.OreReadings.Where(r => r.Value.TotalFactor <= PropickReading.MentionThreshold).ToList();
+			if (droppingReadings.Count > 0)
+				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterEr Prospecting] Factor is below visibility: {droppingReadings}"), EnumChatType.Notification);
+		}
 
 		if (config.DebugMode) {
 			// We want original key because it might have gotten transformed by ConvertChildRocks
@@ -479,7 +490,9 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 				totalFactor = imaginationLandFactor;
 			}
-
+			if (totalFactor <= PropickReading.MentionThreshold) {
+				Logger.Debug("[BetterEr Prospecting] Factor is below visibility: {} for {}", totalFactor, oreCode);
+			}
 			reading.TotalFactor = totalFactor;
 			readings.OreReadings[oreCode] = reading;
 		}
