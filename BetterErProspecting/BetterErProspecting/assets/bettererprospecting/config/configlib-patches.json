@@ -90,7 +90,7 @@
       "ingui": "Stone search radius",
       "type": "integer",
       "comment": "Stone mode search radius",
-      "default": 32,
+      "default": 64,
       "weight": 3.2
     },
     {
