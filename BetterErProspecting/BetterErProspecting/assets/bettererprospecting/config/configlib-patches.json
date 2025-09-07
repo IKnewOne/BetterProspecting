@@ -1,7 +1,12 @@
 {
-  "version": 6,
+  "version": 10,
   "file": "BetterErProspecting.json",
   "settings": [
+    {
+      "type": "separator",
+      "title": "Density",
+      "weight": 1.0
+    },
     {
       "code": "NewDensityMode",
       "ingui": "New density mode",
@@ -21,6 +26,11 @@
         "max": 10
       },
       "weight": 1.2
+    },
+    {
+      "type": "separator",
+      "title": "Proximity",
+      "weight": 2.0
     },
     {
       "code": "AddProximityMode",
@@ -55,12 +65,25 @@
       "weight": 2.3
     },
     {
+      "type": "separator",
+      "title": "Stone",
+      "weight": 3.0
+    },
+    {
       "code": "AddStoneMode",
       "ingui": "Enable Stone Mode",
       "type": "boolean",
       "comment": "Enable big range stone search mode with exact distance to block. Sphere-based",
       "default": true,
       "weight": 3.1
+    },
+    {
+      "code": "StonePercentSearch",
+      "ingui": "Percentage Stone Search",
+      "type": "boolean",
+      "comment": "If enabled, stone mode displays percentage of found rocks relative to total found rocks. Immersion hurrah",
+      "default": true,
+      "weight": 3.15
     },
     {
       "code": "StoneSearchRadius",
@@ -83,6 +106,11 @@
       "weight": 3.3
     },
     {
+      "type": "separator",
+      "title": "Borehole",
+      "weight": 4.0
+    },
+    {
       "code": "AddBoreHoleMode",
       "ingui": "Enable Borehole Mode",
       "type": "boolean",
@@ -101,6 +129,11 @@
         "max": 10
       },
       "weight": 4.2
+    },
+    {
+      "type": "separator",
+      "text": "At least one must be selected",
+      "weight": 4.3
     },
     {
       "code": "BoreholeScansOre",
@@ -125,33 +158,6 @@
       "comment": "Enables in-game debug messages",
       "default": false,
       "weight": 5.1
-    }
-  ],
-  "formatting": [
-    {
-      "type": "separator",
-      "title": "Density",
-      "weight": 1.0
-    },
-    {
-      "type": "separator",
-      "title": "Proximity",
-      "weight": 2.0
-    },
-    {
-      "type": "separator",
-      "title": "Stone",
-      "weight": 3.0
-    },
-    {
-      "type": "separator",
-      "title": "Borehole",
-      "weight": 4.0
-    },
-    {
-      "type": "text",
-      "text": "At least one must be selected",
-      "weight": 4.3
     }
   ]
 }

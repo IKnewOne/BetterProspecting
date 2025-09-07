@@ -302,21 +302,31 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"Area sample taken for a radius of {walkRadius}:"), EnumChatType.Notification);
 
-		Dictionary<string, int> firstBlockDistance = new Dictionary<string, int>();
-
+		// Int is either distance or count
+		Dictionary<string, int> rockInfo = new Dictionary<string, int>();
 		BlockPos blockPos = blockSel.Position.Copy();
 		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius), delegate (Block nblock, int x, int y, int z) {
 			if (nblock.Variant.ContainsKey("rock")) {
 				string key = "rock-" + nblock.Variant["rock"];
-				int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
-				if (!firstBlockDistance.ContainsKey(key) || distance < firstBlockDistance[key]) {
-					firstBlockDistance[key] = distance;
+
+				if (config.StonePercentSearch) {
+					int count = rockInfo.GetValueOrDefault(key, 0);
+					rockInfo[key] = ++count;
+				} else {
+					int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
+					if (!rockInfo.ContainsKey(key) || distance < rockInfo[key]) {
+						rockInfo[key] = distance;
+					}
 				}
+
 			}
 
 		});
 
-		List<KeyValuePair<string, int>> list = firstBlockDistance.ToList();
+		int totalRocks = rockInfo.Values.Sum();
+
+		List<KeyValuePair<string, int>> list = rockInfo.ToList();
+
 		if (list.Count == 0) {
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No rocks neaby"), EnumChatType.Notification);
 			return;
@@ -326,11 +336,15 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		foreach (KeyValuePair<string, int> item in list) {
 			string l = Lang.GetL(serverPlayer.LanguageCode, item.Key);
 			string capitalized = char.ToUpper(l[0]) + l.Substring(1);
-			serverPlayer.SendMessage(
-				GlobalConstants.InfoLogChatGroup,
-				Lang.GetL(serverPlayer.LanguageCode, $"{capitalized}: {item.Value} block(s) away"),
-				EnumChatType.Notification
-			);
+
+			if (config.StonePercentSearch) {
+				double percent = ((double)item.Value * 100.0 / totalRocks);
+				percent = percent > 0.01 ? percent : 0.01; // Don't want to drop results but seeing 0.00 is silly
+				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"{capitalized}: {(percent):0.##} %"), EnumChatType.Notification);
+			} else {
+				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"{capitalized}: {item.Value} block(s) away"), EnumChatType.Notification);
+			}
+
 		}
 
 
