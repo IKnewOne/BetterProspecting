@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using BetterErProspecting.Helper;
 using BetterErProspecting.Interface;
+using HarmonyLib;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -181,8 +183,8 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
 		Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre = new();
 
-		BlockPos blockPos = blockSel.Position.Copy();
-		api.World.BlockAccessor.WalkBlocks(new BlockPos(blockPos.X - chunkSize, mapHeight, blockPos.Z - chunkSize), new BlockPos(blockPos.X + chunkSize, 0, blockPos.Z + chunkSize), delegate (Block nblock, int x, int y, int z) {
+		BlockPos searchedBlock = blockSel.Position.Copy();
+		api.World.BlockAccessor.WalkBlocks(new BlockPos(searchedBlock.X - chunkSize, mapHeight, searchedBlock.Z - chunkSize), new BlockPos(searchedBlock.X + chunkSize, 0, searchedBlock.Z + chunkSize), delegate (Block nblock, int x, int y, int z) {
 
 			// Special case because of course halite is a rock
 			if (nblock.Code.Path.Contains("halite")) {
@@ -210,7 +212,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		List<string> missingPageCode = codeToFoundOre.Keys.Where(k => !existingPages.Contains(k)).ToList();
 		missingPageCode.ForEach(k => codeToFoundOre.Remove(k));
 
-		if (!generateReadigs(world, ppws, blockPos, codeToFoundOre, out PropickReading readings))
+		if (!generateReadigs(world, ppws, blockSel.Position, codeToFoundOre, out PropickReading readings))
 			return;
 
 		if (config.DebugMode) {
@@ -228,12 +230,172 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			}
 		}
 
+		// There are some messages that we process here, but should be sent after
+		List<DelayedMessage> delayedMessages = addMiscReadings(world, serverPlayer, readings, blockSel.Position);
 
 		var textResults = readings.ToHumanReadable(serverPlayer.LanguageCode, ppws.pageCodes);
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, textResults, EnumChatType.Notification);
+
+		delayedMessages.ForEach(msg => msg.Send(serverPlayer));
+
 		world.Api.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(readings, serverPlayer);
 
 	}
+
+	private static List<DelayedMessage> addMiscReadings(IWorldAccessor world, IServerPlayer sp, PropickReading readings, BlockPos pos) {
+		var delayedMessages = new List<DelayedMessage>();
+
+		// Hydrate Or Diedrate
+		// Mimic getProbe and density prospecting 
+		// Desperately waiting for insanityGod to update the code
+		var a = AppDomain.CurrentDomain.GetAssemblies();
+		if (AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.GetName().Name == "HydrateOrDiedrate") is Assembly assembly) {
+			var configType = AccessTools.TypeByName("HydrateOrDiedrate.Config.ModConfig");
+			var configInstance = AccessTools.Property(configType, "Instance")?.GetValue(null);
+			var groundWater = AccessTools.Property(configInstance.GetType(), "GroundWater")?.GetValue(configInstance);
+
+			bool showAquiferProspectingDataOnMap = (AccessTools.Property(groundWater.GetType(), "ShowAquiferProspectingDataOnMap")?.GetValue(groundWater) as bool?) ?? true;
+			bool aquiferDataOnProspectingNodeMode = (AccessTools.Property(groundWater.GetType(), "AquiferDataOnProspectingNodeMode")?.GetValue(groundWater) as bool?) ?? false;
+
+
+			var Aquifermanager = assembly.GetType("HydrateOrDiedrate.Aquifer.AquiferManager");
+			if (Aquifermanager == null)
+				Logger.Error("[BetterErProspecting] Hydrate Or Diedrate found but couldn't retrieve AquiferManager");
+
+			var GetAquiferChunkDataChunkPos = Aquifermanager.GetMethod("GetAquiferChunkData", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IWorldAccessor), typeof(FastVec3i), typeof(ILogger) }, null);
+			var GetAquiferChunkDataBlockPos = Aquifermanager.GetMethod("GetAquiferChunkData", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IWorldAccessor), typeof(BlockPos), typeof(ILogger) }, null);
+
+			if (GetAquiferChunkDataChunkPos == null || GetAquiferChunkDataBlockPos == null)
+				Logger.Error("[BetterErProspecting] Hydrate Or Diedrate found but couldn't retrieve GetAquiferChunkData");
+
+
+			var aquiferData = GetAquiferChunkDataBlockPos.Invoke(null, new object[] { world, pos, world.Logger });
+
+			if (aquiferData != null) {
+
+				var dataProp = aquiferData.GetType().GetProperty("Data", BindingFlags.Public | BindingFlags.Instance);
+				var dataObj = dataProp?.GetValue(aquiferData);
+
+				var isSalty = (bool)dataObj.GetType().GetProperty("IsSalty").GetValue(dataObj);
+				var rating = (int)dataObj.GetType().GetProperty("AquiferRating").GetValue(dataObj);
+
+
+				if (showAquiferProspectingDataOnMap) {
+
+					readings.OreReadings["$aquifer$"] = new OreReading() {
+						DepositCode = isSalty ? "salty" : "fresh",
+						PartsPerThousand = rating,
+						TotalFactor = 0.0000001
+					};
+				}
+
+				if (!aquiferDataOnProspectingNodeMode) {
+					// This technically should happen after prospecting, but will be here for now
+
+					int chunkX = pos.X / GlobalConstants.ChunkSize;
+					int chunkY = pos.Y / GlobalConstants.ChunkSize;
+					int chunkZ = pos.Z / GlobalConstants.ChunkSize;
+
+					string GetAquiferDescription(bool isSalty, int rating, double worldHeight, double posY) {
+						string aquiferType = isSalty ? Lang.Get("hydrateordiedrate:aquifer-salt") : Lang.Get("hydrateordiedrate:aquifer-fresh");
+						return rating switch {
+							<= 10 => Lang.Get("hydrateordiedrate:aquifer-none-detected"),
+							<= 15 => Lang.Get("hydrateordiedrate:aquifer-very-poor", aquiferType),
+							<= 20 => Lang.Get("hydrateordiedrate:aquifer-poor", aquiferType),
+							<= 40 => Lang.Get("hydrateordiedrate:aquifer-light", aquiferType),
+							<= 60 => Lang.Get("hydrateordiedrate:aquifer-moderate", aquiferType),
+							_ => Lang.Get("hydrateordiedrate:aquifer-heavy", aquiferType)
+						};
+					}
+
+
+					string GetDirectionHint(int dx, int dy, int dz) {
+						string horizontal = "";
+						string verticalHor = "";
+
+						if (dz < 0)
+							verticalHor = Lang.Get("hydrateordiedrate:direction-north");
+						else if (dz > 0)
+							verticalHor = Lang.Get("hydrateordiedrate:direction-south");
+
+						if (dx > 0)
+							horizontal = Lang.Get("hydrateordiedrate:direction-east");
+						else if (dx < 0)
+							horizontal = Lang.Get("hydrateordiedrate:direction-west");
+
+						string horizontalPart = (!string.IsNullOrEmpty(verticalHor) && !string.IsNullOrEmpty(horizontal))
+							? verticalHor + "-" + horizontal
+							: (!string.IsNullOrEmpty(verticalHor) ? verticalHor : horizontal);
+
+						string verticalDepth = "";
+						if (dy > 0)
+							verticalDepth = Lang.Get("hydrateordiedrate:direction-above");
+						else if (dy < 0)
+							verticalDepth = Lang.Get("hydrateordiedrate:direction-below");
+						if (!string.IsNullOrEmpty(horizontalPart) && !string.IsNullOrEmpty(verticalDepth))
+							return horizontalPart + " " + Lang.Get("hydrateordiedrate:direction-and") + " " + verticalDepth;
+						else if (!string.IsNullOrEmpty(horizontalPart))
+							return horizontalPart;
+						else if (!string.IsNullOrEmpty(verticalDepth))
+							return verticalDepth;
+						else
+							return Lang.Get("hydrateordiedrate:direction-here");
+					}
+
+
+					int currentRating = rating;
+					string aquiferInfo = currentRating == 0 ? Lang.Get("hydrateordiedrate:aquifer-none") : GetAquiferDescription(isSalty, currentRating, world.BlockAccessor.MapSizeY, pos.Y);
+
+					int radius = (int)AccessTools.Property(groundWater.GetType(), "ProspectingRadius")?.GetValue(groundWater);
+					int bestRating = currentRating;
+					FastVec3i bestChunk = new(chunkX, chunkY, chunkZ);
+
+					for (int dx = -radius; dx <= radius; dx++)
+						for (int dy = -radius; dy <= radius; dy++)
+							for (int dz = -radius; dz <= radius; dz++) {
+								if (dx == 0 && dy == 0 && dz == 0)
+									continue;
+
+
+								FastVec3i checkChunk = new(chunkX + dx, chunkY + dy, chunkZ + dz);
+
+								var aquiferToCheckChunkData = GetAquiferChunkDataChunkPos.Invoke(null, new object[] { world, checkChunk, world.Logger });
+								// I LOVE REFLECTION NULL CHECKS THEY ARE SO FUN
+								if (aquiferToCheckChunkData != null) {
+									var checkDataProp = aquiferToCheckChunkData.GetType().GetProperty("Data", BindingFlags.Public | BindingFlags.Instance);
+									var checkAquiferData = checkDataProp?.GetValue(aquiferToCheckChunkData);
+									if (checkAquiferData != null) {
+										var ratingProp = checkAquiferData.GetType().GetProperty("AquiferRating", BindingFlags.Public | BindingFlags.Instance);
+										if (ratingProp != null) {
+											int checkRating = (int)ratingProp.GetValue(checkAquiferData);
+
+											if (checkRating > bestRating) {
+												bestRating = checkRating;
+												bestChunk = checkChunk;
+											}
+										}
+									}
+								}
+							}
+
+					if (bestRating > currentRating) {
+						int dxDir = bestChunk.X - chunkX;
+						int dyDir = bestChunk.Y - chunkY;
+						int dzDir = bestChunk.Z - chunkZ;
+
+						string directionHint = GetDirectionHint(dxDir, dyDir, dzDir);
+						aquiferInfo += Lang.Get("hydrateordiedrate:aquifer-direction", directionHint);
+					}
+					delayedMessages.Add(new DelayedMessage(aquiferInfo));
+				}
+			} else if (aquiferDataOnProspectingNodeMode) {
+				delayedMessages.Add(new DelayedMessage(Lang.Get("hydrateordiedrate:aquifer-no-data")));
+			}
+
+		}
+		return delayedMessages;
+	}
+
 
 
 	// Radius-based search
@@ -443,8 +605,6 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		return code;
 	}
 
-
-
 	private bool generateReadigs(IWorldAccessor world, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre, out PropickReading readings) {
 
 
@@ -516,5 +676,26 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 	private bool isPropickable(Block block) {
 		return block?.Attributes?["propickable"].AsBool(false) == true;
+	}
+
+	internal class DelayedMessage {
+		public int chatGroup;
+		public string message;
+		public EnumChatType ChatType;
+
+		internal DelayedMessage(int chatGroup, string message, EnumChatType chatType) {
+			this.chatGroup = chatGroup;
+			this.message = message;
+			this.ChatType = chatType;
+		}
+		internal DelayedMessage(string message) {
+			this.chatGroup = GlobalConstants.InfoLogChatGroup;
+			this.message = message;
+			this.ChatType = EnumChatType.Notification;
+		}
+
+		public void Send(IServerPlayer sp) {
+			sp.SendMessage(chatGroup, message, ChatType);
+		}
 	}
 }
