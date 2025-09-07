@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using BetterErProspecting.Helper;
 using BetterErProspecting.Interface;
 using HarmonyLib;
@@ -190,10 +191,6 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			if (nblock.Code.Path.Contains("halite")) {
 				(int Count, string OriginalKey) entry = codeToFoundOre.GetValueOrDefault("halite", (0, "halite"));
 				codeToFoundOre["halite"] = (entry.Count + 1, nblock.Code.Path);
-			}
-
-			if (nblock.Code.Path.Contains("silver")) {
-				var a = 5;
 			}
 
 			if (nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
@@ -462,14 +459,17 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		if (serverPlayer == null)
 			return;
 
-		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"Area sample taken for a radius of {walkRadius}:"), EnumChatType.Notification);
+		StringBuilder sb = new StringBuilder();
+
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"Area sample taken for a radius of {walkRadius}:"));
 
 		// Int is either distance or count
 		Dictionary<string, int> rockInfo = new Dictionary<string, int>();
+
 		BlockPos blockPos = blockSel.Position.Copy();
-		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius), delegate (Block nblock, int x, int y, int z) {
-			if (nblock.Variant.ContainsKey("rock")) {
-				string key = "rock-" + nblock.Variant["rock"];
+		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius), delegate (Block block, int x, int y, int z) {
+			if (block.Variant.ContainsKey("rock")) {
+				var key = "rock-" + block.Variant["rock"];
 
 				if (config.StonePercentSearch) {
 					int count = rockInfo.GetValueOrDefault(key, 0);
@@ -485,31 +485,41 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		});
 
-		int totalRocks = rockInfo.Values.Sum();
-
-		List<KeyValuePair<string, int>> list = rockInfo.ToList();
-
-		if (list.Count == 0) {
+		if (rockInfo.Count == 0) {
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No rocks neaby"), EnumChatType.Notification);
 			return;
 		}
 
-		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Found the following rock types"), EnumChatType.Notification);
-		foreach (KeyValuePair<string, int> item in list) {
-			string l = Lang.GetL(serverPlayer.LanguageCode, item.Key);
-			string capitalized = char.ToUpper(l[0]) + l.Substring(1);
 
-			if (config.StonePercentSearch) {
-				double percent = ((double)item.Value * 100.0 / totalRocks);
-				percent = percent > 0.01 ? percent : 0.01; // Don't want to drop results but seeing 0.00 is silly
-				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"{capitalized}: {(percent):0.##} %"), EnumChatType.Notification);
-			} else {
-				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"{capitalized}: {item.Value} block(s) away"), EnumChatType.Notification);
-			}
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following rock types"));
 
+
+		int totalRocks = rockInfo.Values.Sum();
+		List<KeyValuePair<string, int>> output;
+
+		if (config.StonePercentSearch) {
+			output = rockInfo.OrderByDescending(kvp => kvp.Value).ToList();
+		} else {
+			output = rockInfo.OrderBy(kvp => kvp.Value).ToList();
 		}
 
 
+		foreach ((string key, int amount) in output) {
+			var itemName = Lang.GetL(serverPlayer.LanguageCode, key);
+			var handbook = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(world.GetBlock(key)));
+			var itemLink = $"<a href=\"handbook://{handbook}\">{itemName}</a>";
+
+
+			if (config.StonePercentSearch) {
+				double percent = ((double)amount * 100.0 / totalRocks);
+				percent = percent > 0.01 ? percent : 0.01;
+				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {(percent):0.##} %"));
+			} else {
+				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {amount} block(s) away"));
+			}
+
+		}
+		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
 	}
 
 	// Line-based search
@@ -535,6 +545,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		BlockFacing face = blockSel.Face;
 
+
 		if (!config.BoreholeScansOre && !config.BoreholeScansStone) {
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Borehole has not been configured to search for either type"), EnumChatType.Notification);
 			return;
@@ -546,7 +557,8 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			return;
 		}
 
-		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken:"), EnumChatType.Notification);
+		StringBuilder sb = new StringBuilder();
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken:"));
 
 		var descendingOrderBlocks = new SortedSet<string>();
 
@@ -570,11 +582,13 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		}
 
 		if (descendingOrderBlocks.Count == 0) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No results found"), EnumChatType.Notification);
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "No results found"));
 		} else {
 			var oreNames = descendingOrderBlocks.Select(val => Lang.GetL(serverPlayer.LanguageCode, val));
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Found the following blocks: ") + string.Join(", ", oreNames), EnumChatType.Notification);
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following blocks: ") + string.Join(", ", oreNames));
 		}
+
+		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
 
 		return;
 	}
