@@ -1,4 +1,4 @@
-namespace BetterErProspecting;
+namespace BetterErProspecting.Config;
 
 public class ModConfig {
 	public static string ConfigName = "BetterErProspecting.json";

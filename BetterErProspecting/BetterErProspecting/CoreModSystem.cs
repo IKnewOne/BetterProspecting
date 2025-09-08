@@ -1,15 +1,26 @@
 ﻿using System;
+using BetterErProspecting.Config;
+using BetterErProspecting.Helper;
+using BetterErProspecting.Item;
 using HarmonyLib;
 using Vintagestory.API.Common;
+using Vintagestory.ServerMods;
 
 namespace BetterErProspecting;
-public class BetterErProspectingModSystem : ModSystem {
+public class CoreModSystem : ModSystem, IGeneratorPercentileProvider {
 	public static ILogger Logger { get; private set; }
 	public static ICoreAPI Api { get; private set; }
 	public static Harmony harmony { get; private set; }
 
 	public enum PatchCategory {
 		NewDensityMode
+	}
+
+	/// <summary>
+	/// Registers a percentile calculation method for a generator type. Making sure it's above vanilla's detector 0.025 is your job if you want that
+	/// </summary>
+	public void RegisterCalculator<TGenerator>(System.Func<TGenerator, DepositVariant, int, double> calculator) where TGenerator : DepositGeneratorBase {
+		CalculatorManager.GeneratorToPercentileCalculator[typeof(TGenerator)] = (genBase, variant, empirical) => calculator((TGenerator)genBase, variant, empirical);
 	}
 	public override void Start(ICoreAPI api) {
 		api.Logger.Debug("[BetterErProspecting] Starting...");
@@ -35,6 +46,7 @@ public class BetterErProspectingModSystem : ModSystem {
 		}
 
 		base.Start(api);
+		RegisterCalculator<DiscDepositGenerator>((dGen, variant, empiricalValue) => DiscDistributionCalculator.getPercentileOfEmpiricalValue(dGen, variant, empiricalValue));
 		api.RegisterItemClass("ItemBetterErProspectingPick", typeof(ItemBetterErProspectingPick));
 	}
 

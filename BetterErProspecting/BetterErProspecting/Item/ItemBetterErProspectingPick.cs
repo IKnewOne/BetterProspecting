@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using BetterErProspecting.Helper;
-using BetterErProspecting.Interface;
+using BetterErProspecting.Config;
 using HarmonyLib;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
@@ -17,10 +16,10 @@ using Vintagestory.API.Util;
 using Vintagestory.GameContent;
 using Vintagestory.ServerMods;
 
-namespace BetterErProspecting;
+namespace BetterErProspecting.Item;
 public class ItemBetterErProspectingPick : ItemProspectingPick {
-	SkillItem[]? toolModes;
-	public static ILogger Logger => BetterErProspectingModSystem.Logger;
+	SkillItem[] toolModes;
+	public static ILogger Logger => CoreModSystem.Logger;
 
 	private enum Mode {
 		density,
@@ -41,7 +40,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 	public static ModConfig config => ModConfig.Instance;
 	public override void OnLoaded(ICoreAPI api) {
 
-		toolModes = ObjectCacheUtil.GetOrCreate<SkillItem[]>(api, "proPickToolModes", () => {
+		toolModes = ObjectCacheUtil.GetOrCreate(api, "proPickToolModes", () => {
 			List<SkillItem> modes = new List<SkillItem>();
 
 			if (config.NewDensityMode) {
@@ -158,7 +157,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			return;
 		}
 
-		IPlayer? byPlayer = null;
+		IPlayer byPlayer = null;
 		if (byEntity is EntityPlayer)
 			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
 
@@ -170,7 +169,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			return;
 		}
 
-		IServerPlayer? serverPlayer = byPlayer as IServerPlayer;
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
 			return;
 
@@ -178,7 +177,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		int chunkSize = GlobalConstants.ChunkSize;
 		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockSel.Position);
 		int chunkBlocks = chunkSize * chunkSize * mapHeight;
-		String[] blacklistedBlocks = ["flint", "quartz"];
+		string[] blacklistedBlocks = ["flint", "quartz"];
 
 
 		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
@@ -207,24 +206,18 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		var existingPages = ppws.depositsByCode.Keys.ToList();
 		List<string> missingPageCode = codeToFoundOre.Keys.Where(k => !existingPages.Contains(k)).ToList();
+		var missingPairs = missingPageCode.ToDictionary(k => k, k => codeToFoundOre[k].OriginalKey);
 		missingPageCode.ForEach(k => codeToFoundOre.Remove(k));
 
-		if (!generateReadigs(world, ppws, blockSel.Position, codeToFoundOre, out PropickReading readings))
+		if (!generateReadigs(world, serverPlayer, ppws, blockSel.Position, codeToFoundOre, out PropickReading readings))
 			return;
 
-		if (config.DebugMode) {
-			var droppingReadings = readings.OreReadings.Where(r => r.Value.TotalFactor <= PropickReading.MentionThreshold).ToList();
-			if (droppingReadings.Count > 0)
-				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterEr Prospecting] Factor is below visibility: {droppingReadings}"), EnumChatType.Notification);
-		}
-
-		if (config.DebugMode) {
+		if (config.DebugMode && missingPairs.Count > 0) {
 			// We want original key because it might have gotten transformed by ConvertChildRocks
-			if (missingPageCode.Count > 0) {
-				var pairs = missingPageCode.Select(k => $"{k}:{codeToFoundOre[k].OriginalKey}");
-				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterErProspecting] Missing page codes (missing in prospectable list): {string.Join(", ", pairs)}"), EnumChatType.Notification);
-				serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterErProspecting] Consider reporting to mod developer if you think there's been an error"), EnumChatType.Notification);
-			}
+			var pairs = missingPairs.Select(kv => $"{kv.Key}:{kv.Value}");
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterEr Prospecting] Missing page codes (missing in prospectable list): {string.Join(", ", pairs)}"), EnumChatType.Notification);
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, $"[BetterEr Prospecting] Consider reporting to mod developer if you think there's been an error"), EnumChatType.Notification);
+
 		}
 
 		// There are some messages that we process here, but should be sent after
@@ -251,19 +244,19 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			var configInstance = AccessTools.Property(configType, "Instance")?.GetValue(null);
 			var groundWater = AccessTools.Property(configInstance.GetType(), "GroundWater")?.GetValue(configInstance);
 
-			bool showAquiferProspectingDataOnMap = (AccessTools.Property(groundWater.GetType(), "ShowAquiferProspectingDataOnMap")?.GetValue(groundWater) as bool?) ?? true;
-			bool aquiferDataOnProspectingNodeMode = (AccessTools.Property(groundWater.GetType(), "AquiferDataOnProspectingNodeMode")?.GetValue(groundWater) as bool?) ?? false;
+			bool showAquiferProspectingDataOnMap = AccessTools.Property(groundWater.GetType(), "ShowAquiferProspectingDataOnMap")?.GetValue(groundWater) as bool? ?? true;
+			bool aquiferDataOnProspectingNodeMode = AccessTools.Property(groundWater.GetType(), "AquiferDataOnProspectingNodeMode")?.GetValue(groundWater) as bool? ?? false;
 
 
 			var Aquifermanager = assembly.GetType("HydrateOrDiedrate.Aquifer.AquiferManager");
 			if (Aquifermanager == null)
-				Logger.Error("[BetterErProspecting] Hydrate Or Diedrate found but couldn't retrieve AquiferManager");
+				Logger.Error("[BetterEr Prospecting] Hydrate Or Diedrate found but couldn't retrieve AquiferManager");
 
 			var GetAquiferChunkDataChunkPos = Aquifermanager.GetMethod("GetAquiferChunkData", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IWorldAccessor), typeof(FastVec3i), typeof(ILogger) }, null);
 			var GetAquiferChunkDataBlockPos = Aquifermanager.GetMethod("GetAquiferChunkData", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(IWorldAccessor), typeof(BlockPos), typeof(ILogger) }, null);
 
 			if (GetAquiferChunkDataChunkPos == null || GetAquiferChunkDataBlockPos == null)
-				Logger.Error("[BetterErProspecting] Hydrate Or Diedrate found but couldn't retrieve GetAquiferChunkData");
+				Logger.Error("[BetterEr Prospecting] Hydrate Or Diedrate found but couldn't retrieve GetAquiferChunkData");
 
 
 			var aquiferData = GetAquiferChunkDataBlockPos.Invoke(null, new object[] { world, pos, world.Logger });
@@ -320,9 +313,9 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 						else if (dx < 0)
 							horizontal = Lang.Get("hydrateordiedrate:direction-west");
 
-						string horizontalPart = (!string.IsNullOrEmpty(verticalHor) && !string.IsNullOrEmpty(horizontal))
+						string horizontalPart = !string.IsNullOrEmpty(verticalHor) && !string.IsNullOrEmpty(horizontal)
 							? verticalHor + "-" + horizontal
-							: (!string.IsNullOrEmpty(verticalHor) ? verticalHor : horizontal);
+							: !string.IsNullOrEmpty(verticalHor) ? verticalHor : horizontal;
 
 						string verticalDepth = "";
 						if (dy > 0)
@@ -390,6 +383,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			}
 
 		}
+
 		return delayedMessages;
 	}
 
@@ -400,7 +394,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		damage = config.ProximityDmg;
 
 		int radius = config.ProximitySearchRadius;
-		IPlayer? byPlayer = null;
+		IPlayer byPlayer = null;
 
 		if (byEntity is EntityPlayer) {
 			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
@@ -414,7 +408,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			return;
 		}
 
-		IServerPlayer? serverPlayer = byPlayer as IServerPlayer;
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
 			return;
 
@@ -443,7 +437,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		damage = config.StoneDmg;
 		int walkRadius = config.StoneSearchRadius;
 
-		IPlayer? byPlayer = null;
+		IPlayer byPlayer = null;
 		if (byEntity is EntityPlayer)
 			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
 
@@ -455,7 +449,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			return;
 		}
 
-		IServerPlayer? serverPlayer = byPlayer as IServerPlayer;
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
 			return;
 
@@ -511,9 +505,9 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 
 			if (config.StonePercentSearch) {
-				double percent = ((double)amount * 100.0 / totalRocks);
+				double percent = amount * 100.0 / totalRocks;
 				percent = percent > 0.01 ? percent : 0.01;
-				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {(percent):0.##} %"));
+				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {percent:0.##} %"));
 			} else {
 				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {amount} block(s) away"));
 			}
@@ -527,7 +521,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 	protected virtual void ProbeBorehole(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
 		damage = config.BoreholeDmg;
 
-		IPlayer? byPlayer = null;
+		IPlayer byPlayer = null;
 		if (byEntity is EntityPlayer)
 			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
 
@@ -539,7 +533,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			return;
 		}
 
-		IServerPlayer? serverPlayer = byPlayer as IServerPlayer;
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
 			return;
 
@@ -593,12 +587,12 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		return;
 	}
 
-	// Hey, you. Yes, you. Add your patch for the density here. I even kept it public
 	// Check ProPickWorkSpace.pageCodes and respective child ore codes
 	public Dictionary<string, string> codeToPageConversion = new Dictionary<string, string>() {
 		{"nativegold", "gold" },
 		{"nativesilver", "silver" },
 		{"peridot", "peridot" }, //spammy
+		{"olivine", "olivine" }, //spammy
 
 	};
 	// For now a few cases. The conversion is a public method, can extend from there.
@@ -619,7 +613,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		return code;
 	}
 
-	private bool generateReadigs(IWorldAccessor world, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre, out PropickReading readings) {
+	private bool generateReadigs(IWorldAccessor world, IServerPlayer serverPlayer, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre, out PropickReading readings) {
 
 
 		LCGRandom Rnd = new LCGRandom(api.World.Seed);
@@ -637,6 +631,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		readings = new PropickReading();
 		readings.Position = pos.ToVec3d();
+		StringBuilder sb = new StringBuilder();
 
 		foreach (var foundOre in codeToFoundOre) {
 			string oreCode = foundOre.Key;
@@ -646,18 +641,18 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			var reading = new OreReading();
 			reading.PartsPerThousand = (double)empiricalAmount / chunkBlocks * 1000;
 
-
-			var variant = ppws.depositsByCode[oreCode];
+			DepositVariant variant = ppws.depositsByCode[oreCode];
 			var generator = variant.GeneratorInst;
 
-			double totalFactor;
+			double? totalFactor = CalculatorManager.GetPercentile(generator, variant, empiricalAmount);
 
-			if (generator is DiscDepositGenerator dGen) {
-				totalFactor = DiscDistributionCalculator.getPercentileOfEmpiricalValue(empiricalAmount, dGen, variant);
-			} else if (generator is IGeneratorPercentileProvider iGen) {
-				totalFactor = ((IGeneratorPercentileProvider)iGen).getPercentileOfEmpiricalValue(empiricalAmount, variant);
-			} else {
-				// Fallback to generic factor. Not entirely accurate but we can't leave it empty either
+			if (totalFactor == null) {
+				var debugStr = $"[BetterEr Prospecting] Found no predefined calculator for {generator.GetType()}, using default factor";
+				Logger.Debug(debugStr);
+				if (config.DebugMode) {
+					serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, debugStr, EnumChatType.Notification);
+				}
+				// Fallback to generic factor. Not entirely accurate but we can't leave it empty either ( we can but that would be evil )
 
 				IBlockAccessor blockAccess = world.BlockAccessor;
 				int regsize = blockAccess.RegionSize;
@@ -679,10 +674,22 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 				totalFactor = imaginationLandFactor;
 			}
 			if (totalFactor <= PropickReading.MentionThreshold) {
-				Logger.Debug("[BetterEr Prospecting] Factor is below visibility: {} for {}", totalFactor, oreCode);
+				var debugString = $"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}";
+
+				if (sb.Length > 0) {
+					sb.Append($", {totalFactor:0.####} for {oreCode}");
+				} else {
+					sb.Append(debugString);
+				}
+				Logger.Debug(debugString);
 			}
-			reading.TotalFactor = totalFactor;
+
+			reading.TotalFactor = (double)totalFactor;
 			readings.OreReadings[oreCode] = reading;
+		}
+
+		if (config.DebugMode && sb.Length > 0) {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
 		}
 
 		return true;
@@ -700,12 +707,12 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		internal DelayedMessage(int chatGroup, string message, EnumChatType chatType) {
 			this.chatGroup = chatGroup;
 			this.message = message;
-			this.ChatType = chatType;
+			ChatType = chatType;
 		}
 		internal DelayedMessage(string message) {
-			this.chatGroup = GlobalConstants.InfoLogChatGroup;
+			chatGroup = GlobalConstants.InfoLogChatGroup;
 			this.message = message;
-			this.ChatType = EnumChatType.Notification;
+			ChatType = EnumChatType.Notification;
 		}
 
 		public void Send(IServerPlayer sp) {

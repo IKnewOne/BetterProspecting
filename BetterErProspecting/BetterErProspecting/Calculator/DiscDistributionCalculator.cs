@@ -12,9 +12,9 @@ public static class DiscDistributionCalculator {
 	/// Uses log-normal approximation for efficiency.
 	/// </summary>
 	public static double getPercentileOfEmpiricalValue(
-		int empiricalValue,
 		DiscDepositGenerator dGen,
-		DepositVariant variant
+		DepositVariant variant,
+		int empiricalValue
 	) {
 
 		// If only one is, its variance will disappear and math will be fine

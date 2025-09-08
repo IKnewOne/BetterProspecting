@@ -2,7 +2,7 @@
 using System.Reflection.Emit;
 using HarmonyLib;
 using Vintagestory.GameContent;
-using static BetterErProspecting.BetterErProspectingModSystem;
+using static BetterErProspecting.CoreModSystem;
 
 namespace BetterErProspecting.Patches;
 
