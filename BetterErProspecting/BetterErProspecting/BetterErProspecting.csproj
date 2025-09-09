@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <Reference Include="configlib">
-      <HintPath>..\..\..\VSLibs\configlib.dll</HintPath>
+      <HintPath>..\..\..\VSLibs\configlib\configlib.dll</HintPath>
 		<Private>false</Private>
     </Reference>
     <Reference Include="VintagestoryAPI">

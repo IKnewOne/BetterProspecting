@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -152,12 +152,17 @@
       "weight": 4.5
     },
     {
+      "type": "separator",
+      "title": "DebugMode",
+      "weight": 99.0
+    },
+    {
       "code": "DebugMode",
       "ingui": "Enable Debug Mode",
       "type": "boolean",
       "comment": "Enables in-game debug messages",
       "default": false,
-      "weight": 5.1
+      "weight": 100.0
     }
   ]
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Timers;
 using BetterErProspecting.Config;
 using HarmonyLib;
 using Vintagestory.API.Client;
@@ -20,7 +21,6 @@ namespace BetterErProspecting.Item;
 public class ItemBetterErProspectingPick : ItemProspectingPick {
 	SkillItem[] toolModes;
 	public static ILogger Logger => CoreModSystem.Logger;
-
 	private enum Mode {
 		density,
 		node,
@@ -29,17 +29,18 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		borehole
 	}
 
-	private Dictionary<Mode, AssetLocation> modeToAsset = new Dictionary<Mode, AssetLocation>() {
-		{ Mode.density, new AssetLocation("textures/icons/heatmap.svg") },
-		{ Mode.node, new AssetLocation("textures/icons/rocks.svg") },
-		{ Mode.proximity, new AssetLocation("textures/icons/worldmap/spiral.svg") },
-		{ Mode.stone, new AssetLocation("bettererprospecting", "textures/icons/probe_stone.svg") },
-		{ Mode.borehole, new AssetLocation("bettererprospecting", "textures/icons/probe_borehole.svg") }
+	private Timer _configChangedDebounce;
+
+	private Dictionary<Mode, AssetLocation> modeData = new Dictionary<Mode, AssetLocation>() {
+	{ Mode.density, new AssetLocation("textures/icons/heatmap.svg") },
+	{ Mode.node, new AssetLocation("textures/icons/rocks.svg") },
+	{ Mode.proximity, new AssetLocation("textures/icons/worldmap/spiral.svg") },
+	{ Mode.stone, new AssetLocation("bettererprospecting", "textures/icons/probe_stone.svg") },
+	{ Mode.borehole, new AssetLocation("bettererprospecting", "textures/icons/probe_borehole.svg") }
 	};
 
 	public static ModConfig config => ModConfig.Instance;
 	public override void OnLoaded(ICoreAPI api) {
-
 		toolModes = ObjectCacheUtil.GetOrCreate(api, "proPickToolModes", () => {
 			List<SkillItem> modes = new List<SkillItem>();
 
@@ -83,35 +84,16 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 				});
 			}
 
+			if (api is ICoreClientAPI capi) {
+				foreach (var mode in modes) {
+					mode.WithIcon(capi, capi.Gui.LoadSvgWithPadding(modeData[(Mode)Enum.Parse(typeof(Mode), mode.Code.Path, true)], 48, 48, 5, ColorUtil.WhiteArgb));
+					mode.TexturePremultipliedAlpha = false;
+				}
+			}
+
 			return modes.ToArray();
 		});
-
-		if (api is ICoreClientAPI capi) {
-			for (int i = 0; i < toolModes.Length; i++) {
-				var m = toolModes[i];
-				Mode mode = (Mode)Enum.Parse(typeof(Mode), m.Code.Path, true);
-				m.WithIcon(capi, capi.Gui.LoadSvgWithPadding(modeToAsset[mode], 48, 48, 5, ColorUtil.WhiteArgb));
-				m.TexturePremultipliedAlpha = false;
-			}
-		}
-
 		base.OnLoaded(api);
-	}
-
-	public override SkillItem[] GetToolModes(ItemSlot slot, IClientPlayer forPlayer, BlockSelection blockSel) {
-		return toolModes;
-	}
-
-	public override int GetToolMode(ItemSlot slot, IPlayer byPlayer, BlockSelection blockSel) {
-		return Math.Min(toolModes.Length - 1, slot.Itemstack.Attributes.GetInt("toolMode"));
-	}
-
-	public override float OnBlockBreaking(IPlayer player, BlockSelection blockSel, ItemSlot itemslot, float remainingResistance, float dt, int counter) {
-		float remain = base.OnBlockBreaking(player, blockSel, itemslot, remainingResistance, dt, counter);
-		int toolMode = GetToolMode(itemslot, player, blockSel);
-
-		remain = (remain + remainingResistance) / 2.2f;
-		return remain;
 	}
 
 	public override bool OnBlockBrokenWith(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, float dropQuantityMultiplier = 1) {
@@ -232,6 +214,308 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 	}
 
+	// Radius-based search
+	protected virtual void ProbeProximity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+		damage = config.ProximityDmg;
+
+		int radius = config.ProximitySearchRadius;
+		IPlayer byPlayer = null;
+
+		if (byEntity is EntityPlayer) {
+			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
+		}
+
+		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
+		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
+
+		if (!isPropickable(block)) {
+			damage = 1;
+			return;
+		}
+
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
+		if (serverPlayer == null)
+			return;
+
+		BlockPos pos = blockSel.Position.Copy();
+		int closestOre = -1;
+
+		api.World.BlockAccessor.WalkBlocks(pos.AddCopy(radius, radius, radius), pos.AddCopy(-radius, -radius, -radius), (nblock, x, y, z) => {
+			if (nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
+				var distanceTo = (int)Math.Round(pos.DistanceTo(x, y, z));
+
+				if (closestOre == -1 || closestOre > distanceTo) {
+					closestOre = distanceTo;
+				}
+			}
+		});
+
+		if (closestOre != -1) {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Closest ore is {0} blocks away!", closestOre), EnumChatType.Notification);
+		} else {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No ore found in {0} block radius.", radius), EnumChatType.Notification);
+		}
+	}
+
+	// Radius-based search
+	protected virtual void ProbeStone(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+		damage = config.StoneDmg;
+		int walkRadius = config.StoneSearchRadius;
+
+		IPlayer byPlayer = null;
+		if (byEntity is EntityPlayer)
+			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
+
+		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
+		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
+
+		if (!isPropickable(block)) {
+			damage = 1;
+			return;
+		}
+
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
+		if (serverPlayer == null)
+			return;
+
+		StringBuilder sb = new StringBuilder();
+
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"Area sample taken for a radius of {walkRadius}:"));
+
+		// Int is either distance or count
+		Dictionary<string, int> rockInfo = new Dictionary<string, int>();
+
+		BlockPos blockPos = blockSel.Position.Copy();
+		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius), delegate (Block block, int x, int y, int z) {
+			if (block.Variant.ContainsKey("rock")) {
+				var key = "rock-" + block.Variant["rock"];
+
+				if (config.StonePercentSearch) {
+					int count = rockInfo.GetValueOrDefault(key, 0);
+					rockInfo[key] = ++count;
+				} else {
+					int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
+					if (!rockInfo.ContainsKey(key) || distance < rockInfo[key]) {
+						rockInfo[key] = distance;
+					}
+				}
+
+			}
+
+		});
+
+		if (rockInfo.Count == 0) {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No rocks neaby"), EnumChatType.Notification);
+			return;
+		}
+
+
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following rock types"));
+
+
+		int totalRocks = rockInfo.Values.Sum();
+		List<KeyValuePair<string, int>> output;
+
+		if (config.StonePercentSearch) {
+			output = rockInfo.OrderByDescending(kvp => kvp.Value).ToList();
+		} else {
+			output = rockInfo.OrderBy(kvp => kvp.Value).ToList();
+		}
+
+
+		foreach ((string key, int amount) in output) {
+			string itemLink = getHandbookLinkOrName(world, serverPlayer, key);
+
+			if (config.StonePercentSearch) {
+				double percent = amount * 100.0 / totalRocks;
+				percent = percent > 0.01 ? percent : 0.01;
+				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {percent:0.##} %"));
+			} else {
+				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {amount} block(s) away"));
+			}
+
+		}
+		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
+	}
+
+	// Line-based search
+	// Borehole deez nuts lmao gottem
+	protected virtual void ProbeBorehole(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+		damage = config.BoreholeDmg;
+
+		IPlayer byPlayer = null;
+		if (byEntity is EntityPlayer)
+			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
+
+		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
+		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
+
+		if (!isPropickable(block)) {
+			damage = 1;
+			return;
+		}
+
+		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
+		if (serverPlayer == null)
+			return;
+
+		BlockFacing face = blockSel.Face;
+
+
+		if (!config.BoreholeScansOre && !config.BoreholeScansStone) {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Borehole has not been configured to search for either type"), EnumChatType.Notification);
+			return;
+		}
+
+		// It's MY mod. And i get to decide what's important for immersion:tm:
+		if (face != BlockFacing.UP) {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Bore samples can only be taken from upper side of the block"), EnumChatType.Notification);
+			return;
+		}
+
+		StringBuilder sb = new StringBuilder();
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken:"));
+
+		var blockKeys = new SortedSet<string>();
+
+		BlockPos searchPos = blockSel.Position.Copy();
+		while (searchPos.Y > 0) {
+
+			Block nblock = api.World.BlockAccessor.GetBlock(searchPos);
+			int distance = (int)blockSel.Position.DistanceTo(searchPos);
+
+			if (config.BoreholeScansOre && nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
+				string key = "ore-" + nblock.Variant["type"];
+				blockKeys.Add(key);
+			}
+
+			if (config.BoreholeScansStone && nblock.Variant.ContainsKey("rock")) {
+				string key = "rock-" + nblock.Variant["rock"];
+				blockKeys.Add(key);
+			}
+
+			searchPos.Y -= 1;
+		}
+
+		if (blockKeys.Count == 0) {
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "No results found"));
+		} else {
+			var linkedNames = blockKeys.Select(key => getHandbookLinkOrName(world, serverPlayer, key)).ToList();
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following blocks: ") + string.Join(", ", linkedNames));
+		}
+
+		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
+
+		return;
+	}
+
+	// Check ProPickWorkSpace.pageCodes and respective child ore codes
+	public Dictionary<string, string> codeToPageConversion = new Dictionary<string, string>() {
+		{"nativegold", "gold" },
+		{"nativesilver", "silver" },
+		{"peridot", "peridot" }, //spammy
+		{"olivine", "olivine" }, //spammy
+
+	};
+	// For now a few cases. The conversion is a public method, can extend from there.
+	// I will assume basegame's logic of "_" meaning childnode
+	public string ConvertChildRocks(string code) {
+		int idx = code.LastIndexOf("_");
+		if (idx >= 0) {
+			string suffix = code.Substring(idx + 1);
+
+			if (codeToPageConversion.TryGetValue(suffix, out string value)) {
+				return value;
+			} else {
+				Logger.Warning("[BetterEr Prospecting] tried to convert child ore {0}, found no value. Intentional or missed combo ?", suffix);
+				return suffix;
+			}
+		}
+
+		return code;
+	}
+
+	private bool generateReadigs(IWorldAccessor world, IServerPlayer serverPlayer, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre, out PropickReading readings) {
+
+
+		LCGRandom Rnd = new LCGRandom(api.World.Seed);
+		DepositVariant[] deposits = api.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
+		if (deposits == null) {
+			readings = null;
+			return false;
+
+		}
+
+		int chunkSize = GlobalConstants.ChunkSize;
+		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(pos);
+		int chunkBlocks = chunkSize * chunkSize * mapHeight;
+
+
+		readings = new PropickReading();
+		readings.Position = pos.ToVec3d();
+		StringBuilder sb = new StringBuilder();
+
+		foreach (var foundOre in codeToFoundOre) {
+			string oreCode = foundOre.Key;
+			int empiricalAmount = foundOre.Value.Count;
+
+
+			var reading = new OreReading();
+			reading.PartsPerThousand = (double)empiricalAmount / chunkBlocks * 1000;
+
+			DepositVariant variant = ppws.depositsByCode[oreCode];
+			var generator = variant.GeneratorInst;
+
+			double? totalFactor = CalculatorManager.GetPercentile(generator, variant, empiricalAmount);
+
+			if (totalFactor == null) {
+				var debugStr = $"[BetterEr Prospecting] Found no predefined calculator for {generator.GetType()}, using default factor";
+				Logger.Debug(debugStr);
+				if (config.DebugMode) {
+					serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, debugStr, EnumChatType.Notification);
+				}
+				// Fallback to generic factor. Not entirely accurate but we can't leave it empty either ( we can but that would be evil )
+
+				IBlockAccessor blockAccess = world.BlockAccessor;
+				int regsize = blockAccess.RegionSize;
+				IMapRegion reg = world.BlockAccessor.GetMapRegion(pos.X / regsize, pos.Z / regsize);
+				int lx = pos.X % regsize;
+				int lz = pos.Z % regsize;
+
+				IntDataMap2D map = reg.OreMaps[oreCode];
+				int noiseSize = map.InnerSize;
+
+				float posXInRegionOre = (float)lx / regsize * noiseSize;
+				float posZInRegionOre = (float)lz / regsize * noiseSize;
+
+				int oreDist = map.GetUnpaddedColorLerped(posXInRegionOre, posZInRegionOre);
+				int[] blockColumn = ppws.GetRockColumn(pos.X, pos.Z);
+
+				ppws.depositsByCode[oreCode].GeneratorInst.GetPropickReading(pos, oreDist, blockColumn, out double fakePpt, out double imaginationLandFactor);
+
+				totalFactor = imaginationLandFactor;
+			}
+			if (totalFactor <= PropickReading.MentionThreshold) {
+				var debugString = $"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}";
+
+				if (sb.Length > 0) {
+					sb.Append($", {totalFactor:0.####} for {oreCode}");
+				} else {
+					sb.Append(debugString);
+				}
+				Logger.Debug(debugString);
+			}
+
+			reading.TotalFactor = (double)totalFactor;
+			readings.OreReadings[oreCode] = reading;
+		}
+
+		if (config.DebugMode && sb.Length > 0) {
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
+		}
+
+		return true;
+	}
 	private static List<DelayedMessage> addMiscReadings(IWorldAccessor world, IServerPlayer sp, PropickReading readings, BlockPos pos) {
 		var delayedMessages = new List<DelayedMessage>();
 
@@ -389,316 +673,6 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 
 
-	// Radius-based search
-	protected virtual void ProbeProximity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
-		damage = config.ProximityDmg;
-
-		int radius = config.ProximitySearchRadius;
-		IPlayer byPlayer = null;
-
-		if (byEntity is EntityPlayer) {
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-		}
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-		if (!isPropickable(block)) {
-			damage = 1;
-			return;
-		}
-
-		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
-		if (serverPlayer == null)
-			return;
-
-		BlockPos pos = blockSel.Position.Copy();
-		int closestOre = -1;
-
-		api.World.BlockAccessor.WalkBlocks(pos.AddCopy(radius, radius, radius), pos.AddCopy(-radius, -radius, -radius), (nblock, x, y, z) => {
-			if (nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
-				var distanceTo = (int)Math.Round(pos.DistanceTo(x, y, z));
-
-				if (closestOre == -1 || closestOre > distanceTo) {
-					closestOre = distanceTo;
-				}
-			}
-		});
-
-		if (closestOre != -1) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Closest ore is {0} blocks away!", closestOre), EnumChatType.Notification);
-		} else {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No ore found in {0} block radius.", radius), EnumChatType.Notification);
-		}
-	}
-
-	// Radius-based search
-	protected virtual void ProbeStone(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
-		damage = config.StoneDmg;
-		int walkRadius = config.StoneSearchRadius;
-
-		IPlayer byPlayer = null;
-		if (byEntity is EntityPlayer)
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-		if (!isPropickable(block)) {
-			damage = 1;
-			return;
-		}
-
-		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
-		if (serverPlayer == null)
-			return;
-
-		StringBuilder sb = new StringBuilder();
-
-		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"Area sample taken for a radius of {walkRadius}:"));
-
-		// Int is either distance or count
-		Dictionary<string, int> rockInfo = new Dictionary<string, int>();
-
-		BlockPos blockPos = blockSel.Position.Copy();
-		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius), delegate (Block block, int x, int y, int z) {
-			if (block.Variant.ContainsKey("rock")) {
-				var key = "rock-" + block.Variant["rock"];
-
-				if (config.StonePercentSearch) {
-					int count = rockInfo.GetValueOrDefault(key, 0);
-					rockInfo[key] = ++count;
-				} else {
-					int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
-					if (!rockInfo.ContainsKey(key) || distance < rockInfo[key]) {
-						rockInfo[key] = distance;
-					}
-				}
-
-			}
-
-		});
-
-		if (rockInfo.Count == 0) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No rocks neaby"), EnumChatType.Notification);
-			return;
-		}
-
-
-		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following rock types"));
-
-
-		int totalRocks = rockInfo.Values.Sum();
-		List<KeyValuePair<string, int>> output;
-
-		if (config.StonePercentSearch) {
-			output = rockInfo.OrderByDescending(kvp => kvp.Value).ToList();
-		} else {
-			output = rockInfo.OrderBy(kvp => kvp.Value).ToList();
-		}
-
-
-		foreach ((string key, int amount) in output) {
-			var itemName = Lang.GetL(serverPlayer.LanguageCode, key);
-			var handbook = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(world.GetBlock(key)));
-			var itemLink = $"<a href=\"handbook://{handbook}\">{itemName}</a>";
-
-
-			if (config.StonePercentSearch) {
-				double percent = amount * 100.0 / totalRocks;
-				percent = percent > 0.01 ? percent : 0.01;
-				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {percent:0.##} %"));
-			} else {
-				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {amount} block(s) away"));
-			}
-
-		}
-		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
-	}
-
-	// Line-based search
-	// Borehole deez nuts lmao gottem
-	protected virtual void ProbeBorehole(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
-		damage = config.BoreholeDmg;
-
-		IPlayer byPlayer = null;
-		if (byEntity is EntityPlayer)
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-		if (!isPropickable(block)) {
-			damage = 1;
-			return;
-		}
-
-		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
-		if (serverPlayer == null)
-			return;
-
-		BlockFacing face = blockSel.Face;
-
-
-		if (!config.BoreholeScansOre && !config.BoreholeScansStone) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Borehole has not been configured to search for either type"), EnumChatType.Notification);
-			return;
-		}
-
-		// It's MY mod. And i get to decide what's important for immersion:tm:
-		if (face != BlockFacing.UP) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Bore samples can only be taken from upper side of the block"), EnumChatType.Notification);
-			return;
-		}
-
-		StringBuilder sb = new StringBuilder();
-		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken:"));
-
-		var descendingOrderBlocks = new SortedSet<string>();
-
-		BlockPos searchPos = blockSel.Position.Copy();
-		while (searchPos.Y > 0) {
-
-			Block nblock = api.World.BlockAccessor.GetBlock(searchPos);
-			int distance = (int)blockSel.Position.DistanceTo(searchPos);
-
-			if (config.BoreholeScansOre && nblock.BlockMaterial == EnumBlockMaterial.Ore && nblock.Variant.ContainsKey("type")) {
-				string key = "ore-" + nblock.Variant["type"];
-				descendingOrderBlocks.Add(key);
-			}
-
-			if (config.BoreholeScansStone && nblock.Variant.ContainsKey("rock")) {
-				string key = "rock-" + nblock.Variant["rock"];
-				descendingOrderBlocks.Add(key);
-			}
-
-			searchPos.Y -= 1;
-		}
-
-		if (descendingOrderBlocks.Count == 0) {
-			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "No results found"));
-		} else {
-			var oreNames = descendingOrderBlocks.Select(val => Lang.GetL(serverPlayer.LanguageCode, val));
-			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following blocks: ") + string.Join(", ", oreNames));
-		}
-
-		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
-
-		return;
-	}
-
-	// Check ProPickWorkSpace.pageCodes and respective child ore codes
-	public Dictionary<string, string> codeToPageConversion = new Dictionary<string, string>() {
-		{"nativegold", "gold" },
-		{"nativesilver", "silver" },
-		{"peridot", "peridot" }, //spammy
-		{"olivine", "olivine" }, //spammy
-
-	};
-	// For now a few cases. The conversion is a public method, can extend from there.
-	// I will assume basegame's logic of "_" meaning childnode
-	public string ConvertChildRocks(string code) {
-		int idx = code.LastIndexOf("_");
-		if (idx >= 0) {
-			string suffix = code.Substring(idx + 1);
-
-			if (codeToPageConversion.TryGetValue(suffix, out string value)) {
-				return value;
-			} else {
-				Logger.Warning("[BetterEr Prospecting] tried to convert child ore {0}, found no value. Intentional or missed combo ?", suffix);
-				return suffix;
-			}
-		}
-
-		return code;
-	}
-
-	private bool generateReadigs(IWorldAccessor world, IServerPlayer serverPlayer, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, (int Count, string OriginalKey)> codeToFoundOre, out PropickReading readings) {
-
-
-		LCGRandom Rnd = new LCGRandom(api.World.Seed);
-		DepositVariant[] deposits = api.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
-		if (deposits == null) {
-			readings = null;
-			return false;
-
-		}
-
-		int chunkSize = GlobalConstants.ChunkSize;
-		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(pos);
-		int chunkBlocks = chunkSize * chunkSize * mapHeight;
-
-
-		readings = new PropickReading();
-		readings.Position = pos.ToVec3d();
-		StringBuilder sb = new StringBuilder();
-
-		foreach (var foundOre in codeToFoundOre) {
-			string oreCode = foundOre.Key;
-			int empiricalAmount = foundOre.Value.Count;
-
-
-			var reading = new OreReading();
-			reading.PartsPerThousand = (double)empiricalAmount / chunkBlocks * 1000;
-
-			DepositVariant variant = ppws.depositsByCode[oreCode];
-			var generator = variant.GeneratorInst;
-
-			double? totalFactor = CalculatorManager.GetPercentile(generator, variant, empiricalAmount);
-
-			if (totalFactor == null) {
-				var debugStr = $"[BetterEr Prospecting] Found no predefined calculator for {generator.GetType()}, using default factor";
-				Logger.Debug(debugStr);
-				if (config.DebugMode) {
-					serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, debugStr, EnumChatType.Notification);
-				}
-				// Fallback to generic factor. Not entirely accurate but we can't leave it empty either ( we can but that would be evil )
-
-				IBlockAccessor blockAccess = world.BlockAccessor;
-				int regsize = blockAccess.RegionSize;
-				IMapRegion reg = world.BlockAccessor.GetMapRegion(pos.X / regsize, pos.Z / regsize);
-				int lx = pos.X % regsize;
-				int lz = pos.Z % regsize;
-
-				IntDataMap2D map = reg.OreMaps[oreCode];
-				int noiseSize = map.InnerSize;
-
-				float posXInRegionOre = (float)lx / regsize * noiseSize;
-				float posZInRegionOre = (float)lz / regsize * noiseSize;
-
-				int oreDist = map.GetUnpaddedColorLerped(posXInRegionOre, posZInRegionOre);
-				int[] blockColumn = ppws.GetRockColumn(pos.X, pos.Z);
-
-				ppws.depositsByCode[oreCode].GeneratorInst.GetPropickReading(pos, oreDist, blockColumn, out double fakePpt, out double imaginationLandFactor);
-
-				totalFactor = imaginationLandFactor;
-			}
-			if (totalFactor <= PropickReading.MentionThreshold) {
-				var debugString = $"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}";
-
-				if (sb.Length > 0) {
-					sb.Append($", {totalFactor:0.####} for {oreCode}");
-				} else {
-					sb.Append(debugString);
-				}
-				Logger.Debug(debugString);
-			}
-
-			reading.TotalFactor = (double)totalFactor;
-			readings.OreReadings[oreCode] = reading;
-		}
-
-		if (config.DebugMode && sb.Length > 0) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
-		}
-
-		return true;
-	}
-
-	private bool isPropickable(Block block) {
-		return block?.Attributes?["propickable"].AsBool(false) == true;
-	}
-
 	internal class DelayedMessage {
 		public int chatGroup;
 		public string message;
@@ -719,4 +693,32 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			sp.SendMessage(chatGroup, message, ChatType);
 		}
 	}
+	private bool isPropickable(Block block) {
+		return block?.Attributes?["propickable"].AsBool(false) == true;
+	}
+	public override SkillItem[] GetToolModes(ItemSlot slot, IClientPlayer forPlayer, BlockSelection blockSel) {
+		return toolModes;
+	}
+	public override int GetToolMode(ItemSlot slot, IPlayer byPlayer, BlockSelection blockSel) {
+		return Math.Min(toolModes.Length - 1, slot.Itemstack.Attributes.GetInt("toolMode"));
+	}
+	public override float OnBlockBreaking(IPlayer player, BlockSelection blockSel, ItemSlot itemslot, float remainingResistance, float dt, int counter) {
+		float remain = base.OnBlockBreaking(player, blockSel, itemslot, remainingResistance, dt, counter);
+		int toolMode = GetToolMode(itemslot, player, blockSel);
+
+		remain = (remain + remainingResistance) / 2.2f;
+		return remain;
+	}
+	private static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key) {
+		var itemName = Lang.GetL(serverPlayer.LanguageCode, key);
+		if (world.GetBlock(key) is Block block) {
+			return $"<a href=\"handbook://{GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(block))}\">{itemName}</a>";
+		} else if (world.GetItem(key) is Vintagestory.API.Common.Item item) {
+			return $"<a href=\"handbook://{GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(item))}\">{itemName}</a>";
+		} else {
+			// Sometimes the block looks weird. Don't want to lose data
+			return itemName;
+		}
+	}
+
 }
