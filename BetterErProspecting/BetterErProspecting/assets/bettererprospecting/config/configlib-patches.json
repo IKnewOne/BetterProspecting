@@ -1,5 +1,5 @@
 {
-  "version": 11,
+  "version": 12,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -26,6 +26,14 @@
         "max": 10
       },
       "weight": 1.2
+    },
+    {
+      "code": "AlwaysAddTraceOres",
+      "ingui": "Always add trace ores",
+      "type": "boolean",
+      "comment": "Readings only display values above 0.0025 factor. Turning this on will add all those even single-block ores as traces, whereas in base game they wouldn't be registered. I'd recommend against enabling.",
+      "default": false,
+      "weight": 1.9
     },
     {
       "type": "separator",

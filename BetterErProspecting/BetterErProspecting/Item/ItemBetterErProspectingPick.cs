@@ -29,9 +29,6 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		borehole
 	}
 
-	private Timer _configChangedDebounce;
-
-
 	class ModeData {
 		public AssetLocation Asset;
 		public LoadedTexture Texture;
@@ -75,9 +72,9 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 			// Density mode (two possible names, same SkillItem)
 			if (config.NewDensityMode) {
-				modeData[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, percentage based search)");
+				modeData[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, real blocks based search)");
 			} else {
-				modeData[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, chance based search)");
+				modeData[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, statistic based search)");
 			}
 			modes.Add(modeData[Mode.density].Skill);
 
@@ -508,6 +505,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 				totalFactor = imaginationLandFactor;
 			}
+
 			if (totalFactor <= PropickReading.MentionThreshold) {
 				var debugString = $"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}";
 
@@ -516,7 +514,15 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 				} else {
 					sb.Append(debugString);
 				}
+
 				Logger.Debug(debugString);
+
+				if (config.AlwaysAddTraceOres) {
+					totalFactor = PropickReading.MentionThreshold + 1e-6;
+					sb.AppendLine();
+					sb.Append("Modified to trace level");
+				}
+
 			}
 
 			reading.TotalFactor = (double)totalFactor;

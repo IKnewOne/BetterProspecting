@@ -21,5 +21,6 @@ public class ModConfig {
 	public bool BoreholeScansOre = true;
 	public bool BoreholeScansStone = false;
 
+	public bool AlwaysAddTraceOres = false;
 	public bool DebugMode = false;
 }
