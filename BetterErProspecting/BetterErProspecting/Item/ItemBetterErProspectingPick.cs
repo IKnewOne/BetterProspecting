@@ -31,69 +31,82 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 
 	private Timer _configChangedDebounce;
 
-	private Dictionary<Mode, AssetLocation> modeData = new Dictionary<Mode, AssetLocation>() {
-	{ Mode.density, new AssetLocation("textures/icons/heatmap.svg") },
-	{ Mode.node, new AssetLocation("textures/icons/rocks.svg") },
-	{ Mode.proximity, new AssetLocation("textures/icons/worldmap/spiral.svg") },
-	{ Mode.stone, new AssetLocation("bettererprospecting", "textures/icons/probe_stone.svg") },
-	{ Mode.borehole, new AssetLocation("bettererprospecting", "textures/icons/probe_borehole.svg") }
-	};
+
+	class ModeData {
+		public AssetLocation Asset;
+		public LoadedTexture Texture;
+		public SkillItem Skill;
+
+		public ModeData(Mode mode, string assetPath, string domain = null) {
+			Asset = domain == null ? new AssetLocation(assetPath) : new AssetLocation(domain, assetPath);
+			Skill = new SkillItem { Code = new AssetLocation(mode.ToString()) };
+		}
+	}
+
+	private Dictionary<Mode, ModeData> modeData = new Dictionary<Mode, ModeData>() {
+	{ Mode.density, new ModeData(Mode.density, "textures/icons/heatmap.svg") },
+	{ Mode.node, new ModeData(Mode.node, "textures/icons/rocks.svg") },
+	{ Mode.proximity, new ModeData(Mode.proximity, "textures/icons/worldmap/spiral.svg") },
+	{ Mode.stone, new ModeData(Mode.stone, "textures/icons/probe_stone.svg", "bettererprospecting") },
+	{ Mode.borehole, new ModeData(Mode.borehole, "textures/icons/probe_borehole.svg", "bettererprospecting") }
+};
 
 	public static ModConfig config => ModConfig.Instance;
+	private Timer _reloadDebounce;
 	public override void OnLoaded(ICoreAPI api) {
+
+		GenerateToolModes(api);
+
+		CoreModSystem.SettingChanged += setting => {
+			string[] settingToReloadFor = [nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
+
+			if (settingToReloadFor.Contains(setting.YamlCode)) {
+				DebounceReload(() => { GenerateToolModes(api); });
+			}
+		};
+
+		base.OnLoaded(api);
+	}
+
+	private void GenerateToolModes(ICoreAPI api) {
+		ObjectCacheUtil.Delete(api, "proPickToolModes");
 		toolModes = ObjectCacheUtil.GetOrCreate(api, "proPickToolModes", () => {
 			List<SkillItem> modes = new List<SkillItem>();
 
+			// Density mode (two possible names, same SkillItem)
 			if (config.NewDensityMode) {
-				modes.Add(new SkillItem {
-					Code = new AssetLocation(Mode.density.ToString()),
-					Name = Lang.Get("Density Search Mode (Long range, percentage based search)")
-				});
+				modeData[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, percentage based search)");
 			} else {
-				modes.Add(new SkillItem {
-					Code = new AssetLocation(Mode.density.ToString()),
-					Name = Lang.Get("Density Search Mode (Long range, chance based search)")
-				});
+				modeData[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, chance based search)");
 			}
+			modes.Add(modeData[Mode.density].Skill);
 
+			// Node mode
 			if (int.Parse(api.World.Config.GetString("propickNodeSearchRadius")) > 0) {
-				modes.Add(new SkillItem {
-					Code = new AssetLocation(Mode.node.ToString()),
-					Name = Lang.Get("Node Search Mode (Medim range, exact search)")
-				});
+				modeData[Mode.node].Skill.Name = Lang.Get("Node Search Mode (Medium range, exact search)");
+				modes.Add(modeData[Mode.node].Skill);
 			}
 
+			// Proximity mode
 			if (config.AddProximityMode) {
-				modes.Add(new SkillItem {
-					Code = new AssetLocation(Mode.proximity.ToString()),
-					Name = Lang.Get("Proximity (Short range, exact search)")
-				});
+				modeData[Mode.proximity].Skill.Name = Lang.Get("Proximity (Short range, exact search)");
+				modes.Add(modeData[Mode.proximity].Skill);
 			}
 
+			// Borehole mode
 			if (config.AddBoreHoleMode) {
-				modes.Add(new SkillItem {
-					Code = new AssetLocation(Mode.borehole.ToString()),
-					Name = Lang.Get("Borehole Mode (Vertical line based search)")
-				});
+				modeData[Mode.borehole].Skill.Name = Lang.Get("Borehole Mode (Vertical line based search)");
+				modes.Add(modeData[Mode.borehole].Skill);
 			}
 
+			// Stone mode
 			if (config.AddStoneMode) {
-				modes.Add(new SkillItem {
-					Code = new AssetLocation(Mode.stone.ToString()),
-					Name = Lang.Get("Stone Mode (Long range, distance search for stone)")
-				});
-			}
-
-			if (api is ICoreClientAPI capi) {
-				foreach (var mode in modes) {
-					mode.WithIcon(capi, capi.Gui.LoadSvgWithPadding(modeData[(Mode)Enum.Parse(typeof(Mode), mode.Code.Path, true)], 48, 48, 5, ColorUtil.WhiteArgb));
-					mode.TexturePremultipliedAlpha = false;
-				}
+				modeData[Mode.stone].Skill.Name = Lang.Get("Stone Mode (Long range, distance search for stone)");
+				modes.Add(modeData[Mode.stone].Skill);
 			}
 
 			return modes.ToArray();
 		});
-		base.OnLoaded(api);
 	}
 
 	public override bool OnBlockBrokenWith(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, float dropQuantityMultiplier = 1) {
@@ -697,6 +710,20 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		return block?.Attributes?["propickable"].AsBool(false) == true;
 	}
 	public override SkillItem[] GetToolModes(ItemSlot slot, IClientPlayer forPlayer, BlockSelection blockSel) {
+		var capi = api as ICoreClientAPI;
+
+		foreach (var modeSkill in toolModes) {
+			Mode modeEnum = (Mode)Enum.Parse(typeof(Mode), modeSkill.Code.Path, true);
+			var data = modeData[modeEnum];
+
+			if (data.Texture == null) {
+				data.Texture = capi.Gui.LoadSvgWithPadding(data.Asset, 48, 48, 5, ColorUtil.WhiteArgb);
+			}
+
+			modeSkill.WithIcon(capi, data.Texture);
+			modeSkill.TexturePremultipliedAlpha = false;
+		}
+
 		return toolModes;
 	}
 	public override int GetToolMode(ItemSlot slot, IPlayer byPlayer, BlockSelection blockSel) {
@@ -719,6 +746,22 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 			// Sometimes the block looks weird. Don't want to lose data
 			return itemName;
 		}
+	}
+
+	private void DebounceReload(Action action) {
+		if (_reloadDebounce == null) {
+			_reloadDebounce = new Timer(1000);
+			_reloadDebounce.AutoReset = false;
+			_reloadDebounce.Elapsed += (s, e) => action();
+		}
+
+		_reloadDebounce.Stop();
+		_reloadDebounce.Start();
+	}
+
+	public override void OnUnloaded(ICoreAPI api) {
+		foreach (var item in modeData?.Values) { item?.Skill?.Dispose(); }
+		base.OnUnloaded(api);
 	}
 
 }
