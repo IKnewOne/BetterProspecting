@@ -1,5 +1,5 @@
 {
-  "version": 12,
+  "version": 13,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -34,6 +34,19 @@
       "comment": "Readings only display values above 0.0025 factor. Turning this on will add all those even single-block ores as traces, whereas in base game they wouldn't be registered. I'd recommend against enabling.",
       "default": false,
       "weight": 1.9
+    },
+    {
+      "type": "separator",
+      "text": "Requires the previous setting",
+      "weight": 1.91
+    },
+    {
+      "code": "AddToPoorOres",
+      "ingui": "Add to poor ores instead",
+      "type": "boolean",
+      "comment": "Requires previous setting This would make the PPT values visible, unlike previously. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this.",
+      "default": false,
+      "weight": 1.95
     },
     {
       "type": "separator",

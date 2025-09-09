@@ -464,6 +464,7 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 		readings = new PropickReading();
 		readings.Position = pos.ToVec3d();
 		StringBuilder sb = new StringBuilder();
+		bool didOreLevelUpscale = false;
 
 		foreach (var foundOre in codeToFoundOre) {
 			string oreCode = foundOre.Key;
@@ -515,21 +516,25 @@ public class ItemBetterErProspectingPick : ItemProspectingPick {
 					sb.Append(debugString);
 				}
 
-				Logger.Debug(debugString);
-
 				if (config.AlwaysAddTraceOres) {
-					totalFactor = PropickReading.MentionThreshold + 1e-6;
-					sb.AppendLine();
-					sb.Append("Modified to trace level");
+					if (config.AddToPoorOres) {
+						totalFactor = 0.15; // It's actually ~1.3 but 5 engages monkey brain
+					} else {
+						totalFactor = PropickReading.MentionThreshold + 1e-6;
+					}
 				}
-
 			}
 
 			reading.TotalFactor = (double)totalFactor;
 			readings.OreReadings[oreCode] = reading;
 		}
 
+
 		if (config.DebugMode && sb.Length > 0) {
+			if (didOreLevelUpscale) {
+				sb.AppendLine();
+				sb.Append(config.AddToPoorOres ? "Modified to poor level" : "Modified to trace level");
+			}
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
 		}
 
