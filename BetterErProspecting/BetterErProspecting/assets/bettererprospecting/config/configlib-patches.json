@@ -1,5 +1,5 @@
 {
-  "version": 13,
+  "version": 15,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -28,30 +28,32 @@
       "weight": 1.2
     },
     {
+      "type": "separator",
+      "title": "Total Factor toggles. ( Low factor from other mods fixes )",
+      "weight": 1.9,
+      "collapsible": true
+    },
+    {
       "code": "AlwaysAddTraceOres",
       "ingui": "Always add trace ores",
       "type": "boolean",
       "comment": "Readings only display values above 0.0025 factor. Turning this on will add all those even single-block ores as traces, whereas in base game they wouldn't be registered. I'd recommend against enabling.",
       "default": false,
-      "weight": 1.9
-    },
-    {
-      "type": "separator",
-      "text": "Requires the previous setting",
       "weight": 1.91
     },
     {
       "code": "AddToPoorOres",
-      "ingui": "Add to poor ores instead",
+      "ingui": "Add them to poor ores instead",
       "type": "boolean",
-      "comment": "Requires previous setting This would make the PPT values visible, unlike previously. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this.",
+      "comment": "Requires the previous setting This would make the PPT values visible, unlike previously. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this.",
       "default": false,
       "weight": 1.95
     },
     {
       "type": "separator",
       "title": "Proximity",
-      "weight": 2.0
+      "weight": 2.0,
+      "collapsible":  false
     },
     {
       "code": "AddProximityMode",

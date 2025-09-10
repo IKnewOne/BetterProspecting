@@ -11,6 +11,10 @@ public class ModConfig {
 	public int ProximitySearchRadius = 5;
 	public int ProximityDmg = 2;
 
+	public bool AlwaysAddTraceOres = false;
+	public bool AddToPoorOres = false;
+	public bool UsePercentForUndefinedGenerators = false;
+
 	public bool AddStoneMode = true;
 	public bool StonePercentSearch = true;
 	public int StoneSearchRadius = 64;
@@ -21,7 +25,5 @@ public class ModConfig {
 	public bool BoreholeScansOre = true;
 	public bool BoreholeScansStone = false;
 
-	public bool AlwaysAddTraceOres = false;
-	public bool AddToPoorOres = false;
 	public bool DebugMode = false;
 }
