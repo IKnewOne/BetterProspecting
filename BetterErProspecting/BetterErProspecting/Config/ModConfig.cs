@@ -4,6 +4,9 @@ public class ModConfig {
 	public static string ConfigName = "BetterErProspecting.json";
 	public static ModConfig Instance { get; set; } = new ModConfig();
 
+	public bool EnableDensityMode = true;
+	public bool OneShotDensity = false;
+
 	public bool NewDensityMode = true;
 	public int NewDensityDmg = 3;
 

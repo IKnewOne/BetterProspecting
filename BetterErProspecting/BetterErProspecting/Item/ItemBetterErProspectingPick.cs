@@ -7,10 +7,12 @@ using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.Config;
+using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 using Vintagestory.API.Util;
 using Vintagestory.GameContent;
+using Vintagestory.ServerMods;
 using ModConfig = BetterErProspecting.Config.ModConfig;
 
 namespace BetterErProspecting.Item;
@@ -40,8 +42,9 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		GenerateToolModes(api);
 
+		var deposits = api.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
 		ModSystem.ReloadTools += () => {
-			DebounceReload(() => { GenerateToolModes(api); });
+			GenerateToolModes(api);
 		};
 
 		base.OnLoaded(api);
@@ -53,12 +56,15 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			List<SkillItem> modes = new List<SkillItem>();
 
 			// Density mode (two possible names, same SkillItem)
-			if (config.NewDensityMode) {
-				modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, real blocks based search)");
-			} else {
-				modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, statistic based search)");
+			if (config.EnableDensityMode) {
+				if (config.NewDensityMode) {
+					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, real blocks based search)");
+				} else {
+					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, statistic based search)");
+				}
+				modes.Add(modeDataStorage[Mode.density].Skill);
 			}
-			modes.Add(modeDataStorage[Mode.density].Skill);
+
 
 			// Node mode
 			if (api.World.Config.GetAsInt("propickNodeSearchRadius") > 0) {
@@ -89,38 +95,62 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	public override bool OnBlockBrokenWith(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, float dropQuantityMultiplier = 1) {
-		int tm = GetToolMode(itemslot, (byEntity as EntityPlayer).Player, blockSel);
-		SkillItem skillItem = toolModes[tm];
-		Mode toolMode = (Mode)Enum.Parse(typeof(Mode), skillItem.Code.Path, true);
+		if (byEntity is not EntityPlayer playerEntity) { return false; }
 
+		int tm = GetToolMode(itemslot, (byEntity as EntityPlayer).Player, blockSel);
 		int damage = 1;
 
-		switch (toolMode) {
-			case Mode.density:
-				if (!config.NewDensityMode) {
-					base.ProbeBlockDensityMode(world, byEntity, itemslot, blockSel);
-				} else {
-					ProbeBlockDensityMode(world, byEntity, itemslot, blockSel, out damage);
-				}
-				break;
-			case Mode.node:
-				base.ProbeBlockNodeMode(world, byEntity, itemslot, blockSel, api.World.Config.GetAsInt("propickNodeSearchRadius"));
-				break;
-			case Mode.proximity:
-				ProbeProximity(world, byEntity, itemslot, blockSel, out damage);
-				break;
+		if (tm >= 0) {
+			SkillItem skillItem = toolModes[tm];
+			Mode toolMode = (Mode)Enum.Parse(typeof(Mode), skillItem.Code.Path, true);
 
-			case Mode.stone:
-				ProbeStone(world, byEntity, itemslot, blockSel, out damage);
-				break;
 
-			case Mode.borehole:
-				ProbeBorehole(world, byEntity, itemslot, blockSel, out damage);
-				break;
+			switch (toolMode) {
+				case Mode.density:
+					if (config.NewDensityMode) {
+						ProbeBlockDensityMode(world, playerEntity, itemslot, blockSel, out damage);
+					} else if (config.OneShotDensity) {
+
+						var block = world.BlockAccessor.GetBlock(blockSel.Position);
+						if (isPropickable(block)) {
+							damage = 3;
+							dropQuantityMultiplier = 0;
+
+							if (playerEntity.Player is IServerPlayer serverPlayer) {
+								base.PrintProbeResults(world, serverPlayer, itemslot, blockSel.Position);
+							}
+						}
+
+						block.OnBlockBroken(world, blockSel.Position, playerEntity.Player, dropQuantityMultiplier);
+
+					} else
+						base.ProbeBlockDensityMode(world, byEntity, itemslot, blockSel);
+					break;
+				case Mode.node:
+					base.ProbeBlockNodeMode(world, byEntity, itemslot, blockSel, api.World.Config.GetAsInt("propickNodeSearchRadius"));
+					break;
+				case Mode.proximity:
+					ProbeProximity(world, byEntity, itemslot, blockSel, out damage);
+					break;
+
+				case Mode.stone:
+					ProbeStone(world, byEntity, itemslot, blockSel, out damage);
+					break;
+
+				case Mode.borehole:
+					ProbeBorehole(world, byEntity, itemslot, blockSel, out damage);
+					break;
+			}
+
+		} else {
+			// All modes disabled
+			// Why ?
+			world.BlockAccessor.GetBlock(blockSel.Position).OnBlockBroken(world, blockSel.Position, playerEntity.Player, 1);
 		}
 
+
 		if (DamagedBy != null && DamagedBy.Contains(EnumItemDamageSource.BlockBreaking)) {
-			DamageItem(world, byEntity, itemslot, damage);
+			DamageItem(world, playerEntity, itemslot, damage);
 		}
 
 		return true;
@@ -186,11 +216,11 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			});
 
 		if (nopageVariant.Count > 0) {
-			delayedMessages.Add(new DelayedMessage(Lang.Get("[BetterEr Prospecting] Found ore keys not in the ppws prospectable list. Intentional ? : {0}", String.Join(", ", nopageVariant))));
+			delayedMessages.Add(new DelayedMessage(Lang.Get("[BetterEr Prospecting] Found ore keys not in the ppws prospectable list. Is it intentional ? : {0}", String.Join(", ", nopageVariant))));
 			delayedMessages.Add(new DelayedMessage(Lang.Get("[BetterEr Prospecting] Expected keys are: {0}", String.Join(", ", ppws.depositsByCode.Keys))));
 		}
 
-		if (!generateReadigs(sapi, serverPlayer, ppws, blockSel.Position, codeToFoundCount, out PropickReading readings))
+		if (!generateReadigs(sapi, serverPlayer, ppws, blockSel.Position, codeToFoundCount, out PropickReading readings, delayedMessages))
 			return;
 
 		addMiscReadings(sapi, serverPlayer, readings, blockSel.Position, delayedMessages);
@@ -343,6 +373,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
 		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
 
+
 		if (!isPropickable(block)) {
 			damage = 1;
 			return;
@@ -367,33 +398,38 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		}
 
 		StringBuilder sb = new StringBuilder();
-		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken:"));
+		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
 
-		var blockKeys = new HashSet<string>();
+		sb.Append(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken. "));
 
-		BlockPos blockPos = blockSel.Position.Copy();
+		// Need to hold unique insertion order. OrderedHashSet where art thou ?
+		var blockKeys = new OrderedDictionary<string, string>();
 		var cache = new Dictionary<string, string>();
 
+		BlockPos blockPos = blockSel.Position.Copy();
 
-		api.World.BlockAccessor.WalkBlocks(blockPos.Copy(), new BlockPos(blockPos.X, 0, blockPos.Y),
-			(walkBlock, x, y, z) => {
-				//TODO fix borehole ore text
-				if (config.BoreholeScansOre && IsOre(walkBlock, cache, out string key, out string typeKey)) {
-					blockKeys.Add(key);
-				}
+		//Walk unreliable
+		while (blockPos.Y > 0) {
+			Block sBlock = api.World.BlockAccessor.GetBlock(blockPos);
 
-				if (config.BoreholeScansStone && IsRock(walkBlock, cache, out key)) {
-					blockKeys.Add(key);
-				}
+			if (config.BoreholeScansOre && IsOre(sBlock, cache, out string fullKey, out string oreKey)) {
+				var oreHandbook = ppws.depositsByCode.GetValueOrDefault(oreKey, null)?.HandbookPageCode;
+				blockKeys.TryAdd(fullKey, oreHandbook);
+			} else
+			if (config.BoreholeScansStone && IsRock(sBlock, cache, out fullKey, out string rockKey)) {
+				blockKeys.TryAdd(fullKey, null);
+			}
 
-			});
-
+			blockPos.Y--;
+		}
 
 		if (blockKeys.Count == 0) {
+			sb.AppendLine();
 			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "No results found"));
 		} else {
-			var linkedNames = blockKeys.Select(key => getHandbookLinkOrName(world, serverPlayer, key)).ToList();
-			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following blocks: ") + string.Join(", ", linkedNames));
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following: "));
+			var linkedNames = blockKeys.Select(kv => getHandbookLinkOrName(world, serverPlayer, kv.Key, handbookUrl: blockKeys[kv.Key])).ToList();
+			sb.AppendLine(string.Join(", ", linkedNames));
 		}
 
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
@@ -423,7 +459,6 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 	public override float OnBlockBreaking(IPlayer player, BlockSelection blockSel, ItemSlot itemslot, float remainingResistance, float dt, int counter) {
 		float remain = base.OnBlockBreaking(player, blockSel, itemslot, remainingResistance, dt, counter);
-		int toolMode = GetToolMode(itemslot, player, blockSel);
 
 		remain = (remain + remainingResistance) / 2.2f;
 		return remain;
@@ -432,6 +467,5 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		foreach (var item in modeDataStorage?.Values) { item?.Skill?.Dispose(); }
 		base.OnUnloaded(api);
 	}
-
 
 }

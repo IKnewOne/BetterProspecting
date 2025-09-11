@@ -1,17 +1,34 @@
 {
-  "version": 15,
+  "version": 16,
   "file": "BetterErProspecting.json",
   "settings": [
     {
       "type": "separator",
       "title": "Density",
-      "weight": 1.0
+      "weight": 1.0,
+      "collapsible":  true
+    },
+    {
+      "code": "EnableDensityMode",
+      "ingui": "Enables density mode",
+      "type": "boolean",
+      "comment": "",
+      "default": true,
+      "weight": 1.05
+    },
+    {
+      "code": "OneShotDensity",
+      "ingui": "One Shot density mode",
+      "type": "boolean",
+      "comment": "Has no impact if new density is enabled",
+      "default": false,
+      "weight": 1.07
     },
     {
       "code": "NewDensityMode",
-      "ingui": "New density mode",
+      "ingui": "Use new density mode",
       "type": "boolean",
-      "comment": "Enables the new density mode. For now, only 20 radius. Doesn't report false positives, reports real PPT. Scans top-bottom of the world(asterisks included)",
+      "comment": "Replaces vanilla mode with the new density mode",
       "default": true,
       "weight": 1.1
     },
@@ -53,7 +70,7 @@
       "type": "separator",
       "title": "Proximity",
       "weight": 2.0,
-      "collapsible":  false
+      "collapsible": true
     },
     {
       "code": "AddProximityMode",
@@ -90,7 +107,8 @@
     {
       "type": "separator",
       "title": "Stone",
-      "weight": 3.0
+      "weight": 3.0,
+      "collapsible": true
     },
     {
       "code": "AddStoneMode",
@@ -131,7 +149,8 @@
     {
       "type": "separator",
       "title": "Borehole",
-      "weight": 4.0
+      "weight": 4.0,
+      "collapsible": true
     },
     {
       "code": "AddBoreHoleMode",

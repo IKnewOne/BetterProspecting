@@ -55,7 +55,9 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 			if (domain != "bettererprospecting")
 				return;
 
-			string[] settingsToolReload = [nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
+			setting.AssignSettingValue(ModConfig.Instance);
+
+			string[] settingsToolReload = [nameof(ModConfig.EnableDensityMode), nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
 			string[] settingsPatch = [nameof(ModConfig.NewDensityMode)];
 
 			if (settingsToolReload.Contains(setting.YamlCode)) {
@@ -65,6 +67,7 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 			if (settingsPatch.Contains(setting.YamlCode)) {
 				PatchUnpatch();
 			}
+
 
 		};
 	}

@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using System.Timers;
 using BetterErProspecting.Item.Data;
 using HydrateOrDiedrate;
 using HydrateOrDiedrate.Aquifer;
@@ -42,7 +41,9 @@ public partial class ItemBetterErProspectingPick {
 		return suffix;
 	}
 
-	public static bool generateReadigs(ICoreServerAPI sapi, IServerPlayer serverPlayer, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, int> codeToFoundOre, out PropickReading readings) {
+	public static bool generateReadigs(ICoreServerAPI sapi, IServerPlayer serverPlayer, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, int> codeToFoundOre, out PropickReading readings, List<DelayedMessage> delayedMessages = null) {
+		delayedMessages ??= new List<DelayedMessage>();
+
 		var world = sapi.World;
 		LCGRandom Rnd = new LCGRandom(sapi.World.Seed);
 		DepositVariant[] deposits = sapi.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
@@ -60,6 +61,7 @@ public partial class ItemBetterErProspectingPick {
 		readings = new PropickReading();
 		readings.Position = pos.ToVec3d();
 		StringBuilder sb = new StringBuilder();
+		StringBuilder factVisSb = new StringBuilder();
 		bool didOreLevelUpscale = false;
 
 		foreach (var foundOre in codeToFoundOre) {
@@ -102,12 +104,10 @@ public partial class ItemBetterErProspectingPick {
 			}
 
 			if (totalFactor <= PropickReading.MentionThreshold) {
-				var debugString = $"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}";
-
-				if (sb.Length > 0) {
-					sb.Append($", {totalFactor:0.####} for {oreCode}");
+				if (factVisSb.Length == 0) {
+					factVisSb.Append($"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}");
 				} else {
-					sb.Append(debugString);
+					factVisSb.Append($", {totalFactor:0.####} for {oreCode}");
 				}
 
 				if (config.AlwaysAddTraceOres) {
@@ -124,26 +124,35 @@ public partial class ItemBetterErProspectingPick {
 		}
 
 
-		if (config.DebugMode && sb.Length > 0) {
+		if (config.DebugMode && (sb.Length > 0 || factVisSb.Length > 0)) {
 			if (didOreLevelUpscale) {
-				sb.AppendLine();
-				sb.Append(config.AddToPoorOres ? "Modified to poor level" : "Modified to trace level");
+				factVisSb.AppendLine();
+				factVisSb.AppendLine(config.AddToPoorOres ? "Modified to poor level" : "Modified to trace level");
 			}
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
+
+			if (factVisSb.Length > 0) {
+				delayedMessages.Add(new DelayedMessage(factVisSb.ToString()));
+			}
+			if (sb.Length > 0) {
+				delayedMessages.Add(new DelayedMessage(sb.ToString()));
+			}
 		}
 
 		return true;
 	}
-	public static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key) {
-		var itemName = Lang.GetL(serverPlayer.LanguageCode, key);
-		if (world.GetBlock(key) is Block block) {
-			return $"<a href=\"handbook://{GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(block))}\">{itemName}</a>";
-		} else if (world.GetItem(key) is Vintagestory.API.Common.Item item) {
-			return $"<a href=\"handbook://{GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(item))}\">{itemName}</a>";
-		} else {
-			// Sometimes the block looks weird. Don't want to lose data
-			return itemName;
+	public static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key, string itemName = null, string handbookUrl = null) {
+		itemName ??= Lang.GetL(serverPlayer.LanguageCode, key);
+
+
+		if (handbookUrl == null) {
+			if (world.GetBlock(key) is Block block) {
+				handbookUrl = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(block));
+			} else if (world.GetItem(key) is Vintagestory.API.Common.Item item) {
+				handbookUrl = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(item));
+			}
 		}
+
+		return handbookUrl != null ? $"<a href=\"handbook://{handbookUrl}\">{itemName}</a>" : itemName;
 	}
 	private static List<DelayedMessage> addMiscReadings(ICoreServerAPI sapi, IServerPlayer serverPlayer, PropickReading readings, BlockPos pos, List<DelayedMessage> delayedMessages = null) {
 		delayedMessages ??= new List<DelayedMessage>();
@@ -225,16 +234,5 @@ public partial class ItemBetterErProspectingPick {
 
 
 	public static bool isPropickable(Block block) { return block?.Attributes?["propickable"].AsBool(false) == true; }
-	private Timer _reloadDebounce;
-	private void DebounceReload(Action action) {
-		if (_reloadDebounce == null) {
-			_reloadDebounce = new Timer(1000);
-			_reloadDebounce.AutoReset = false;
-			_reloadDebounce.Elapsed += (s, e) => action();
-		}
-
-		_reloadDebounce.Stop();
-		_reloadDebounce.Start();
-	}
 	#endregion
 }
