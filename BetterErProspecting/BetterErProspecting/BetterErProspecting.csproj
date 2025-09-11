@@ -8,11 +8,11 @@
 
   <ItemGroup>
     <Reference Include="configlib">
-      <HintPath>..\..\..\VSLibs\dlls\configlib.dll</HintPath>
+      <HintPath>$(VSLIBS)/dlls/configlib.dll</HintPath>
 		<Private>false</Private>
     </Reference>
     <Reference Include="HydrateOrDiedrate">
-      <HintPath>..\..\..\VSLibs\HydrateOrDiedrate\HydrateOrDiedrate\bin\Release\Mods\mod\HydrateOrDiedrate.dll</HintPath>
+      <HintPath>..\..\..\VSLibs\dlls\HydrateOrDiedrate.dll</HintPath>
 		<Private>false</Private>
     </Reference>
     <Reference Include="VintagestoryAPI">

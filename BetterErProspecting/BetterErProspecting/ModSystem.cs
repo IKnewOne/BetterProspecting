@@ -7,7 +7,7 @@ using HarmonyLib;
 using Vintagestory.API.Common;
 using Vintagestory.ServerMods;
 namespace BetterErProspecting;
-public class CoreModSystem : ModSystem, IGeneratorPercentileProvider {
+public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider {
 	public static ILogger Logger { get; private set; }
 	public static ICoreAPI Api { get; private set; }
 	public static Harmony harmony { get; private set; }
@@ -28,16 +28,9 @@ public class CoreModSystem : ModSystem, IGeneratorPercentileProvider {
 		Logger = Mod.Logger;
 
 		try {
-			ModConfig.Instance = api.LoadModConfig<ModConfig>(ModConfig.ConfigName);
-			if (ModConfig.Instance == null) {
-				ModConfig.Instance = new ModConfig();
-				Logger.VerboseDebug("[BetterErProspecting] Config file not found, creating a new one...");
-			}
+			ModConfig.Instance = api.LoadModConfig<ModConfig>(ModConfig.ConfigName) ?? new ModConfig();
 			api.StoreModConfig(ModConfig.Instance, ModConfig.ConfigName);
-		} catch (Exception e) {
-			Logger.Error("[BetterErProspecting] Failed to load config, you probably made a typo: {0}", e);
-			ModConfig.Instance = new ModConfig();
-		}
+		} catch (Exception _) { ModConfig.Instance = new ModConfig(); }
 
 		if (api.ModLoader.IsModEnabled("configlib")) {
 			SubscribeToConfigChange(api);
@@ -65,12 +58,6 @@ public class CoreModSystem : ModSystem, IGeneratorPercentileProvider {
 		system.SettingChanged += (domain, config, setting) => {
 			if (domain != "bettererprospecting")
 				return;
-
-			// Color is a bit fucked rn
-			if (setting.AssignSettingValue(ModConfig.Instance) && setting.SettingType == ConfigSettingType.Color) {
-				ModConfig.Instance = api.LoadModConfig<ModConfig>(ModConfig.ConfigName);
-			}
-
 			SettingChanged.Invoke(setting);
 		};
 	}

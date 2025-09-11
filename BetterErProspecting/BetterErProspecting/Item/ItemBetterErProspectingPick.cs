@@ -15,7 +15,7 @@ using ModConfig = BetterErProspecting.Config.ModConfig;
 
 namespace BetterErProspecting.Item;
 public partial class ItemBetterErProspectingPick : ItemProspectingPick {
-	public static ILogger Logger => CoreModSystem.Logger;
+	public static ILogger Logger => ModSystem.Logger;
 	ICoreServerAPI sapi;
 	SkillItem[] toolModes;
 	public enum Mode {
@@ -41,7 +41,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		GenerateToolModes(api);
 
-		CoreModSystem.SettingChanged += setting => {
+		ModSystem.SettingChanged += setting => {
 			string[] settingToReloadFor = [nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
 
 			if (settingToReloadFor.Contains(setting.YamlCode)) {
@@ -66,7 +66,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			modes.Add(modeDataStorage[Mode.density].Skill);
 
 			// Node mode
-			if (int.Parse(api.World.Config.GetString("propickNodeSearchRadius")) > 0) {
+			if (api.World.Config.GetAsInt("propickNodeSearchRadius") > 0) {
 				modeDataStorage[Mode.node].Skill.Name = Lang.Get("Node Search Mode (Medium range, exact search)");
 				modes.Add(modeDataStorage[Mode.node].Skill);
 			}
@@ -109,7 +109,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 				}
 				break;
 			case Mode.node:
-				base.ProbeBlockNodeMode(world, byEntity, itemslot, blockSel, int.Parse(api.World.Config.GetString("propickNodeSearchRadius")));
+				base.ProbeBlockNodeMode(world, byEntity, itemslot, blockSel, api.World.Config.GetAsInt("propickNodeSearchRadius"));
 				break;
 			case Mode.proximity:
 				ProbeProximity(world, byEntity, itemslot, blockSel, out damage);
@@ -169,14 +169,14 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		string[] knownBlacklistedCodes = ["flint", "quartz"];
 
 		api.World.BlockAccessor.WalkBlocks(new BlockPos(searchedBlock.X - radius, mapHeight, searchedBlock.Z - radius), new BlockPos(searchedBlock.X + radius, 0, searchedBlock.Z + radius),
-			(Block block, int x, int y, int z) => {
-				if (block.Variant == null)
+			(Block walkBlock, int x, int y, int z) => {
+				if (walkBlock.Variant == null)
 					return;
 
 				string key;
 
-				bool isOre = IsOre(block, cache, out string fullKey, out key);
-				bool isRock = !isOre && IsRock(block, cache, out fullKey, out key);
+				bool isOre = IsOre(walkBlock, cache, out string fullKey, out key);
+				bool isRock = !isOre && IsRock(walkBlock, cache, out fullKey, out key);
 
 				if (isOre || isRock) {
 					if (knownBlacklistedCodes.Contains(key))
@@ -238,15 +238,16 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		int closestOre = -1;
 		var cache = new Dictionary<string, string>();
 
-		api.World.BlockAccessor.WalkBlocks(pos.AddCopy(radius, radius, radius), pos.AddCopy(-radius, -radius, -radius), (nblock, x, y, z) => {
-			if (IsOre(block, cache, out string key)) {
-				var distanceTo = (int)Math.Round(pos.DistanceTo(x, y, z));
+		api.World.BlockAccessor.WalkBlocks(pos.AddCopy(radius, radius, radius), pos.AddCopy(-radius, -radius, -radius),
+			(walkBlock, x, y, z) => {
+				if (IsOre(walkBlock, cache, out string key)) {
+					var distanceTo = (int)Math.Round(pos.DistanceTo(x, y, z));
 
-				if (closestOre == -1 || closestOre > distanceTo) {
-					closestOre = distanceTo;
+					if (closestOre == -1 || closestOre > distanceTo) {
+						closestOre = distanceTo;
+					}
 				}
-			}
-		});
+			});
 
 		if (closestOre != -1) {
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Closest ore is {0} blocks away!", closestOre), EnumChatType.Notification);
@@ -285,22 +286,23 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		BlockPos blockPos = blockSel.Position.Copy();
 		var cache = new Dictionary<string, string>();
-		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius), delegate (Block block, int x, int y, int z) {
-			if (IsRock(block, cache, out string key)) {
+		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius),
+			(walkBlock, x, y, z) => {
+				if (IsRock(walkBlock, cache, out string key)) {
 
-				if (config.StonePercentSearch) {
-					int count = rockInfo.GetValueOrDefault(key, 0);
-					rockInfo[key] = ++count;
-				} else {
-					int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
-					if (!rockInfo.ContainsKey(key) || distance < rockInfo[key]) {
-						rockInfo[key] = distance;
+					if (config.StonePercentSearch) {
+						int count = rockInfo.GetValueOrDefault(key, 0);
+						rockInfo[key] = ++count;
+					} else {
+						int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
+						if (!rockInfo.ContainsKey(key) || distance < rockInfo[key]) {
+							rockInfo[key] = distance;
+						}
 					}
+
 				}
 
-			}
-
-		});
+			});
 
 		if (rockInfo.Count == 0) {
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No rocks neaby"), EnumChatType.Notification);
@@ -374,24 +376,23 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		var blockKeys = new HashSet<string>();
 
-		BlockPos searchPos = blockSel.Position.Copy();
+		BlockPos blockPos = blockSel.Position.Copy();
 		var cache = new Dictionary<string, string>();
 
-		while (searchPos.Y > 0) {
 
-			Block nblock = api.World.BlockAccessor.GetBlock(searchPos);
+		api.World.BlockAccessor.WalkBlocks(blockPos.Copy(), new BlockPos(blockPos.X, 0, blockPos.Y),
+			(walkBlock, x, y, z) => {
+				//TODO fix borehole ore text
+				if (config.BoreholeScansOre && IsOre(walkBlock, cache, out string key, out string typeKey)) {
+					blockKeys.Add(key);
+				}
 
-			string key;
-			if (config.BoreholeScansOre && IsOre(block, cache, out key)) {
-				blockKeys.Add(key);
-			}
+				if (config.BoreholeScansStone && IsRock(walkBlock, cache, out key)) {
+					blockKeys.Add(key);
+				}
 
-			if (config.BoreholeScansStone && IsRock(block, cache, out key)) {
-				blockKeys.Add(key);
-			}
+			});
 
-			searchPos.Y -= 1;
-		}
 
 		if (blockKeys.Count == 0) {
 			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "No results found"));
