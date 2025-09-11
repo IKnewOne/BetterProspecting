@@ -38,15 +38,10 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	public override void OnLoaded(ICoreAPI api) {
 		sapi = api as ICoreServerAPI;
 
-
 		GenerateToolModes(api);
 
-		ModSystem.SettingChanged += setting => {
-			string[] settingToReloadFor = [nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
-
-			if (settingToReloadFor.Contains(setting.YamlCode)) {
-				DebounceReload(() => { GenerateToolModes(api); });
-			}
+		ModSystem.ReloadTools += () => {
+			DebounceReload(() => { GenerateToolModes(api); });
 		};
 
 		base.OnLoaded(api);

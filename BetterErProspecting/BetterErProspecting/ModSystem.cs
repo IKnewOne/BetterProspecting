@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using BetterErProspecting.Config;
 using BetterErProspecting.Helper;
 using BetterErProspecting.Item;
@@ -6,13 +7,15 @@ using ConfigLib;
 using HarmonyLib;
 using Vintagestory.API.Common;
 using Vintagestory.ServerMods;
+
 namespace BetterErProspecting;
+
 public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider {
 	public static ILogger Logger { get; private set; }
 	public static ICoreAPI Api { get; private set; }
 	public static Harmony harmony { get; private set; }
 
-	public static event Action<ISetting> SettingChanged;
+	public static event Action ReloadTools;
 
 	/// <summary>
 	/// Registers a percentile calculation method for a generator type. Making sure it's above vanilla's detector 0.025 is your job if you want that
@@ -34,13 +37,6 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 
 		if (api.ModLoader.IsModEnabled("configlib")) {
 			SubscribeToConfigChange(api);
-
-			// Need something better
-			SettingChanged += (setting) => {
-				if (setting.YamlCode == nameof(ModConfig.NewDensityMode)) {
-					PatchUnpatch();
-				}
-			};
 		}
 
 		PatchUnpatch();
@@ -58,7 +54,18 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 		system.SettingChanged += (domain, config, setting) => {
 			if (domain != "bettererprospecting")
 				return;
-			SettingChanged.Invoke(setting);
+
+			string[] settingsToolReload = [nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
+			string[] settingsPatch = [nameof(ModConfig.NewDensityMode)];
+
+			if (settingsToolReload.Contains(setting.YamlCode)) {
+				ReloadTools?.Invoke();
+			}
+
+			if (settingsPatch.Contains(setting.YamlCode)) {
+				PatchUnpatch();
+			}
+
 		};
 	}
 
