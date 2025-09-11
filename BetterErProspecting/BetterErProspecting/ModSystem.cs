@@ -33,7 +33,7 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 		try {
 			ModConfig.Instance = api.LoadModConfig<ModConfig>(ModConfig.ConfigName) ?? new ModConfig();
 			api.StoreModConfig(ModConfig.Instance, ModConfig.ConfigName);
-		} catch (Exception _) { ModConfig.Instance = new ModConfig(); }
+		} catch (Exception) { ModConfig.Instance = new ModConfig(); }
 
 		if (api.ModLoader.IsModEnabled("configlib")) {
 			SubscribeToConfigChange(api);

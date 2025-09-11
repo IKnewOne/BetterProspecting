@@ -95,9 +95,8 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	public override bool OnBlockBrokenWith(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, float dropQuantityMultiplier = 1) {
-		if (byEntity is not EntityPlayer playerEntity) { return false; }
-
-		int tm = GetToolMode(itemslot, (byEntity as EntityPlayer).Player, blockSel);
+		IPlayer byPlayer = (byEntity as EntityPlayer).Player;
+		int tm = GetToolMode(itemslot, byPlayer, blockSel);
 		int damage = 1;
 
 		if (tm >= 0) {
@@ -108,69 +107,62 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			switch (toolMode) {
 				case Mode.density:
 					if (config.NewDensityMode) {
-						ProbeBlockDensityMode(world, playerEntity, itemslot, blockSel, out damage);
-					} else if (config.OneShotDensity) {
-
-						var block = world.BlockAccessor.GetBlock(blockSel.Position);
-						if (isPropickable(block)) {
-							damage = 3;
-							dropQuantityMultiplier = 0;
-
-							if (playerEntity.Player is IServerPlayer serverPlayer) {
-								base.PrintProbeResults(world, serverPlayer, itemslot, blockSel.Position);
-							}
-						}
-
-						block.OnBlockBroken(world, blockSel.Position, playerEntity.Player, dropQuantityMultiplier);
-
-					} else
-						base.ProbeBlockDensityMode(world, byEntity, itemslot, blockSel);
+						ProbeBlockDensityMode(world, byPlayer, itemslot, blockSel, ref damage);
+					} else {
+						ProbeVanillaDensity(world, byEntity, itemslot, blockSel, ref damage);
+					}
 					break;
 				case Mode.node:
 					base.ProbeBlockNodeMode(world, byEntity, itemslot, blockSel, api.World.Config.GetAsInt("propickNodeSearchRadius"));
 					break;
 				case Mode.proximity:
-					ProbeProximity(world, byEntity, itemslot, blockSel, out damage);
+					ProbeProximity(world, byPlayer, itemslot, blockSel, ref damage);
 					break;
-
 				case Mode.stone:
-					ProbeStone(world, byEntity, itemslot, blockSel, out damage);
+					ProbeStone(world, byPlayer, itemslot, blockSel, ref damage);
 					break;
-
 				case Mode.borehole:
-					ProbeBorehole(world, byEntity, itemslot, blockSel, out damage);
+					ProbeBorehole(world, byPlayer, itemslot, blockSel, ref damage);
 					break;
 			}
 
 		} else {
 			// All modes disabled
-			// Why ?
-			world.BlockAccessor.GetBlock(blockSel.Position).OnBlockBroken(world, blockSel.Position, playerEntity.Player, 1);
+			// Propickn't
+			world.BlockAccessor.GetBlock(blockSel.Position).OnBlockBroken(world, blockSel.Position, byPlayer, 1);
 		}
 
 
 		if (DamagedBy != null && DamagedBy.Contains(EnumItemDamageSource.BlockBreaking)) {
-			DamageItem(world, playerEntity, itemslot, damage);
+			DamageItem(world, byEntity, itemslot, damage);
 		}
 
 		return true;
 	}
 
+	// Handle oneshot here too
+	protected virtual void ProbeVanillaDensity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+		if (config.OneShotDensity) {
+			damage = 3;
+			IPlayer byPlayer = (byEntity as EntityPlayer).Player;
+
+			if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
+				return;
+
+			if (byPlayer is IServerPlayer severPlayer)
+				base.PrintProbeResults(world, severPlayer, itemslot, blockSel.Position);
+
+		} else {
+			base.ProbeBlockDensityMode(world, byEntity, itemslot, blockSel);
+		}
+	}
+
 	// Modded Density amount-based search. Square with chunkSize radius around current block. Whole mapheight
-	protected virtual void ProbeBlockDensityMode(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+	protected virtual void ProbeBlockDensityMode(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = 3;
 
-		IPlayer byPlayer = null;
-		if (byEntity is EntityPlayer)
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-		if (!isPropickable(block)) {
-			damage = 1;
+		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
-		}
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
@@ -237,23 +229,12 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Radius-based search
-	protected virtual void ProbeProximity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+	protected virtual void ProbeProximity(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.ProximityDmg;
-
 		int radius = config.ProximitySearchRadius;
-		IPlayer byPlayer = null;
 
-		if (byEntity is EntityPlayer) {
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-		}
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-		if (!isPropickable(block)) {
-			damage = 1;
+		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
-		}
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
@@ -282,21 +263,12 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Radius-based search
-	protected virtual void ProbeStone(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+	protected virtual void ProbeStone(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.StoneDmg;
 		int walkRadius = config.StoneSearchRadius;
 
-		IPlayer byPlayer = null;
-		if (byEntity is EntityPlayer)
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-		if (!isPropickable(block)) {
-			damage = 1;
+		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
-		}
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
@@ -363,21 +335,12 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Line-based search
-	protected virtual void ProbeBorehole(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, out int damage) {
+	protected virtual void ProbeBorehole(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.BoreholeDmg;
 
-		IPlayer byPlayer = null;
-		if (byEntity is EntityPlayer)
-			byPlayer = world.PlayerByUid(((EntityPlayer)byEntity).PlayerUID);
-
-		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
-		block.OnBlockBroken(world, blockSel.Position, byPlayer, 0);
-
-
-		if (!isPropickable(block)) {
-			damage = 1;
+		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
-		}
+
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
