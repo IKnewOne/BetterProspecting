@@ -20,7 +20,8 @@ public partial class ItemBetterErProspectingPick {
 	public static Dictionary<string, string> specialOreCodeConversion = new Dictionary<string, string>() {
 		// These have items different than the code used for the material. Funnily enough, both of them are child deposits
 		{"nativegold", "gold" },
-		{"nativesilver", "silver" }
+		{"nativesilver", "silver" },
+		{"lapislazuli", "lapis" }
 	};
 	// For now a few cases. The conversion is a public method, can extend from there.
 	// I will assume basegame's logic of "_" meaning childnode
