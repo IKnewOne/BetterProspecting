@@ -2,55 +2,26 @@
 using System.Collections.Generic;
 using System.Text;
 using BetterErProspecting.Item.Data;
-using HydrateOrDiedrate;
-using HydrateOrDiedrate.Aquifer;
-using HydrateOrDiedrate.Aquifer.ModData;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
 using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
+using Vintagestory.API.Util;
 using Vintagestory.GameContent;
 using Vintagestory.ServerMods;
 
 namespace BetterErProspecting.Item;
 public partial class ItemBetterErProspectingPick {
 
-	// These are assholes
-	public static Dictionary<string, string> specialOreCodeConversion = new Dictionary<string, string>() {
-		// These have items different than the code used for the material. Funnily enough, both of them are child deposits
-		{"nativegold", "gold" },
-		{"nativesilver", "silver" }
-	};
-	// For now a few cases. The conversion is a public method, can extend from there.
-	// I will assume basegame's logic of "_" meaning childnode
-	public static string ConvertChildRocks(string code) {
-		if (code == null)
-			return null;
-
-		var span = code.AsSpan();
-		int idx = code.LastIndexOf('_');
-		ReadOnlySpan<char> suffixSpan = idx >= 0 ? span.Slice(idx + 1) : span;
-
-		string suffix = suffixSpan.ToString();
-
-		if (specialOreCodeConversion.TryGetValue(suffix, out var value)) {
-			return value;
-		}
-
-		return suffix;
-	}
-
-	public static bool generateReadigs(ICoreServerAPI sapi, IServerPlayer serverPlayer, ProPickWorkSpace ppws, BlockPos pos, Dictionary<string, int> codeToFoundOre, out PropickReading readings, List<DelayedMessage> delayedMessages = null) {
-		delayedMessages ??= new List<DelayedMessage>();
-
+	public static bool generateReadigs(ICoreServerAPI sapi, IServerPlayer serverPlayer, BlockPos pos, Dictionary<string, int> codeToFoundOre, out PropickReading readings, ref List<DelayedMessage> delayedMessages, ProPickWorkSpace ppws = null) {
+		ppws ??= ObjectCacheUtil.TryGet<ProPickWorkSpace>(sapi, "propickworkspace");
 		var world = sapi.World;
 		LCGRandom Rnd = new LCGRandom(sapi.World.Seed);
 		DepositVariant[] deposits = sapi.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
 		if (deposits == null) {
 			readings = null;
 			return false;
-
 		}
 
 		int chunkSize = GlobalConstants.ChunkSize;
@@ -140,55 +111,33 @@ public partial class ItemBetterErProspectingPick {
 
 		return true;
 	}
-	public static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key, string itemName = null, string handbookUrl = null) {
-		itemName ??= Lang.GetL(serverPlayer.LanguageCode, key);
-
-
-		if (handbookUrl == null) {
-			if (world.GetBlock(key) is Block block) {
-				handbookUrl = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(block));
-			} else if (world.GetItem(key) is Vintagestory.API.Common.Item item) {
-				handbookUrl = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(item));
-			}
-		}
-
-		return handbookUrl != null ? $"<a href=\"handbook://{handbookUrl}\">{itemName}</a>" : itemName;
-	}
-	private static List<DelayedMessage> addMiscReadings(ICoreServerAPI sapi, IServerPlayer serverPlayer, PropickReading readings, BlockPos pos, List<DelayedMessage> delayedMessages = null) {
-		delayedMessages ??= new List<DelayedMessage>();
-
-		// Hydrate Or Diedrate
-		if (sapi.ModLoader.IsModEnabled("hydrateordiedrate")) {
-			hydrateOrDiedrate(sapi, readings, pos, delayedMessages);
-		}
-
-		return delayedMessages;
-	}
-	private static void hydrateOrDiedrate(ICoreServerAPI sapi, PropickReading readings, BlockPos pos, List<DelayedMessage> delayedMessages) {
-		var world = sapi.World;
-
-		HydrateOrDiedrateModSystem system = sapi.ModLoader.GetModSystem<HydrateOrDiedrateModSystem>();
-
-		if (new Version(system.Mod.Info.Version) < new Version("2.2.12")) {
-			delayedMessages.Add(new DelayedMessage("[BetterEr Prospecting] Please update HydrateOrDietrade for aquifer support"));
-			return;
-		}
-
-		var chnData = AquiferManager.GetAquiferChunkData(world, pos)?.Data;
-		if (chnData == null) {
-			return;
-		}
-
-		var hydrateConfig = HydrateOrDiedrate.Config.ModConfig.Instance;
-
-		if (hydrateConfig.GroundWater.ShowAquiferProspectingDataOnMap) {
-			readings.OreReadings.Add(AquiferData.OreReadingKey, chnData);
-		}
-
-		delayedMessages.Add(new DelayedMessage(AquiferManager.GetAquiferDirectionHint(world, pos)));
-	}
 
 	#region Helpers
+	// These are assholes
+	public static Dictionary<string, string> specialOreCodeConversion = new Dictionary<string, string>() {
+		// These have items different than the code used for the material. Funnily enough, both of them are child deposits
+		{"nativegold", "gold" },
+		{"nativesilver", "silver" },
+		{"lapislazuli", "lapis" }
+	};
+	// For now a few cases. The conversion is a public method, can extend from there.
+	// I will assume basegame's logic of "_" meaning childnode
+	public static string ConvertChildRocks(string code) {
+		if (code == null)
+			return null;
+
+		var span = code.AsSpan();
+		int idx = code.LastIndexOf('_');
+		ReadOnlySpan<char> suffixSpan = idx >= 0 ? span.Slice(idx + 1) : span;
+
+		string suffix = suffixSpan.ToString();
+
+		if (specialOreCodeConversion.TryGetValue(suffix, out var value)) {
+			return value;
+		}
+
+		return suffix;
+	}
 	public static bool IsOre(Block block, Dictionary<string, string> cache, out string key, out string typeKey) {
 		key = null;
 		typeKey = null;
@@ -229,8 +178,22 @@ public partial class ItemBetterErProspectingPick {
 	public static bool IsRock(Block block, Dictionary<string, string> cache, out string key) {
 		return IsRock(block, cache, out key, out _);
 	}
+	public static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key, string itemName = null, string handbookUrl = null) {
+		itemName ??= Lang.GetL(serverPlayer.LanguageCode, key);
 
-	private static bool breakIsPropickable(IWorldAccessor world, IPlayer byPlayer, BlockSelection blockSel, ref int damage) {
+
+		if (handbookUrl == null) {
+			if (world.GetBlock(key) is Block block) {
+				handbookUrl = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(block));
+			} else if (world.GetItem(key) is Vintagestory.API.Common.Item item) {
+				handbookUrl = GuiHandbookItemStackPage.PageCodeForStack(new ItemStack(item));
+			}
+		}
+
+		return handbookUrl != null ? $"<a href=\"handbook://{handbookUrl}\">{itemName}</a>" : itemName;
+	}
+
+	private bool breakIsPropickable(IPlayer byPlayer, BlockSelection blockSel, ref int damage) {
 		Block block = world.BlockAccessor.GetBlock(blockSel.Position);
 
 		if (!block?.Attributes?["propickable"].AsBool(false) == true) {

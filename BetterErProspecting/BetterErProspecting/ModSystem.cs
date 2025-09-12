@@ -1,21 +1,21 @@
 ﻿using System;
-using System.Linq;
+using System.Collections.Generic;
 using BetterErProspecting.Config;
 using BetterErProspecting.Helper;
 using BetterErProspecting.Item;
-using ConfigLib;
+using BetterErProspecting.Item.Data;
 using HarmonyLib;
 using Vintagestory.API.Common;
+using Vintagestory.API.Server;
+using Vintagestory.GameContent;
 using Vintagestory.ServerMods;
 
 namespace BetterErProspecting;
 
-public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider {
+public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider, IRealBlocksReadingsProvider {
 	public static ILogger Logger { get; private set; }
 	public static ICoreAPI Api { get; private set; }
 	public static Harmony harmony { get; private set; }
-
-	public static event Action ReloadTools;
 
 	/// <summary>
 	/// Registers a percentile calculation method for a generator type. Making sure it's above vanilla's detector 0.025 is your job if you want that
@@ -35,10 +35,6 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 			api.StoreModConfig(ModConfig.Instance, ModConfig.ConfigName);
 		} catch (Exception) { ModConfig.Instance = new ModConfig(); }
 
-		if (api.ModLoader.IsModEnabled("configlib")) {
-			SubscribeToConfigChange(api);
-		}
-
 		PatchUnpatch();
 
 		base.Start(api);
@@ -46,33 +42,6 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 		RegisterCalculator<DiscDepositGenerator>((dGen, variant, empiricalValue) => DiscDistributionCalculator.getPercentileOfEmpiricalValue(dGen, variant, empiricalValue));
 		api.RegisterItemClass("ItemBetterErProspectingPick", typeof(ItemBetterErProspectingPick));
 	}
-
-
-	private void SubscribeToConfigChange(ICoreAPI api) {
-		ConfigLibModSystem system = api.ModLoader.GetModSystem<ConfigLibModSystem>();
-
-		system.SettingChanged += (domain, config, setting) => {
-			if (domain != "bettererprospecting")
-				return;
-
-			setting.AssignSettingValue(ModConfig.Instance);
-
-			string[] settingsToolReload = [nameof(ModConfig.EnableDensityMode), nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
-			string[] settingsPatch = [nameof(ModConfig.NewDensityMode)];
-
-			if (settingsToolReload.Contains(setting.YamlCode)) {
-				ReloadTools?.Invoke();
-			}
-
-			if (settingsPatch.Contains(setting.YamlCode)) {
-				PatchUnpatch();
-			}
-
-
-		};
-	}
-
-
 
 	public override void Dispose() {
 		harmony?.UnpatchAll(Mod.Info.ModID);
@@ -90,6 +59,11 @@ public class ModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentile
 			harmony.UnpatchCategory(nameof(PatchCategory.NewDensityMode));
 		}
 	}
+
+	public bool ProbeBlockDensitySearch(ICoreServerAPI sapi, IServerPlayer serverPlayer, BlockSelection blockSel, out PropickReading readings, ref List<DelayedMessage> delayedMessages) {
+		return ItemBetterErProspectingPick.ProbeBlockDensitySearch(sapi, serverPlayer, blockSel, out readings, ref delayedMessages);
+	}
+
 
 	public enum PatchCategory {
 		NewDensityMode

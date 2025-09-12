@@ -12,14 +12,15 @@ using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 using Vintagestory.API.Util;
 using Vintagestory.GameContent;
-using Vintagestory.ServerMods;
 using ModConfig = BetterErProspecting.Config.ModConfig;
 
 namespace BetterErProspecting.Item;
 public partial class ItemBetterErProspectingPick : ItemProspectingPick {
+	public static ModConfig config => ModConfig.Instance;
 	public static ILogger Logger => ModSystem.Logger;
 	ICoreServerAPI sapi;
-	SkillItem[] toolModes;
+	IWorldAccessor world;
+	ProPickWorkSpace? ppws;
 	public enum Mode {
 		density,
 		node,
@@ -36,17 +37,12 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		{ Mode.borehole, new ModeData(Mode.borehole, "textures/icons/probe_borehole.svg", "bettererprospecting") }
 	};
 
-	public static ModConfig config => ModConfig.Instance;
+	SkillItem[] toolModes;
 	public override void OnLoaded(ICoreAPI api) {
 		sapi = api as ICoreServerAPI;
+		world = api.World;
 
 		GenerateToolModes(api);
-
-		var deposits = api.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
-		ModSystem.ReloadTools += () => {
-			GenerateToolModes(api);
-		};
-
 		base.OnLoaded(api);
 	}
 
@@ -107,22 +103,22 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			switch (toolMode) {
 				case Mode.density:
 					if (config.NewDensityMode) {
-						ProbeBlockDensityMode(world, byPlayer, itemslot, blockSel, ref damage);
+						ProbeBlockDensityMode(byPlayer, itemslot, blockSel, ref damage);
 					} else {
-						ProbeVanillaDensity(world, byEntity, itemslot, blockSel, ref damage);
+						ProbeVanillaDensity(byEntity, itemslot, blockSel, ref damage);
 					}
 					break;
 				case Mode.node:
 					base.ProbeBlockNodeMode(world, byEntity, itemslot, blockSel, api.World.Config.GetAsInt("propickNodeSearchRadius"));
 					break;
 				case Mode.proximity:
-					ProbeProximity(world, byPlayer, itemslot, blockSel, ref damage);
+					ProbeProximity(byPlayer, itemslot, blockSel, ref damage);
 					break;
 				case Mode.stone:
-					ProbeStone(world, byPlayer, itemslot, blockSel, ref damage);
+					ProbeStone(byPlayer, itemslot, blockSel, ref damage);
 					break;
 				case Mode.borehole:
-					ProbeBorehole(world, byPlayer, itemslot, blockSel, ref damage);
+					ProbeBorehole(byPlayer, itemslot, blockSel, ref damage);
 					break;
 			}
 
@@ -141,12 +137,12 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Handle oneshot here too
-	protected virtual void ProbeVanillaDensity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	protected virtual void ProbeVanillaDensity(Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		if (config.OneShotDensity) {
 			damage = 3;
 			IPlayer byPlayer = (byEntity as EntityPlayer).Player;
 
-			if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
+			if (!breakIsPropickable(byPlayer, blockSel, ref damage))
 				return;
 
 			if (byPlayer is IServerPlayer severPlayer)
@@ -158,34 +154,52 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Modded Density amount-based search. Square with chunkSize radius around current block. Whole mapheight
-	protected virtual void ProbeBlockDensityMode(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	protected virtual void ProbeBlockDensityMode(IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = 3;
 
-		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
+		if (!breakIsPropickable(byPlayer, blockSel, ref damage))
 			return;
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
 		if (serverPlayer == null)
 			return;
 
-		int radius = GlobalConstants.ChunkSize;
-		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockSel.Position);
-		int chunkBlocks = radius * radius * mapHeight;
+		ppws ??= ObjectCacheUtil.TryGet<ProPickWorkSpace>(sapi, "propickworkspace");
 
-		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
+		List<DelayedMessage> delayedMessages = new();
+		PropickReading readings;
 
-		BlockPos searchedBlock = blockSel.Position.Copy();
 
-		List<DelayedMessage> delayedMessages = new List<DelayedMessage>();
+		if (!ProbeBlockDensitySearch(sapi, serverPlayer, blockSel, out readings, ref delayedMessages, ppws)) {
+			return;
+		}
 
+		var textResults = readings.ToHumanReadable(serverPlayer.LanguageCode, ppws.pageCodes);
+		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, textResults, EnumChatType.Notification);
+
+		if (config.DebugMode) {
+			delayedMessages.ForEach(msg => msg.Send(serverPlayer));
+		}
+
+		world.Api.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(readings, serverPlayer);
+
+	}
+
+	public static bool ProbeBlockDensitySearch(ICoreServerAPI sapi, IServerPlayer serverPlayer, BlockSelection blockSel, out PropickReading readings, ref List<DelayedMessage> delayedMessages, ProPickWorkSpace ppws = null) {
+		ppws ??= ObjectCacheUtil.TryGet<ProPickWorkSpace>(sapi, "propickworkspace");
 		var cache = new Dictionary<string, string>();
-		Dictionary<string, int> codeToFoundCount = new();
-		HashSet<string> nopageVariant = new HashSet<string>();
 		var depositKeys = new HashSet<string>(ppws.depositsByCode.Keys);
 
-		string[] knownBlacklistedCodes = ["flint", "quartz"];
 
-		api.World.BlockAccessor.WalkBlocks(new BlockPos(searchedBlock.X - radius, mapHeight, searchedBlock.Z - radius), new BlockPos(searchedBlock.X + radius, 0, searchedBlock.Z + radius),
+		Dictionary<string, int> codeToFoundCount = new();
+		HashSet<string> nopageVariant = new HashSet<string>();
+
+		string[] knownBlacklistedCodes = new string[] { "flint", "quartz" };
+
+		int radius = GlobalConstants.ChunkSize;
+		int mapHeight = sapi.World.BlockAccessor.GetTerrainMapheightAt(blockSel.Position);
+
+		sapi.World.BlockAccessor.WalkBlocks(new BlockPos(blockSel.Position.X - radius, mapHeight, blockSel.Position.Z - radius), new BlockPos(blockSel.Position.X + radius, 0, blockSel.Position.Z + radius),
 			(Block walkBlock, int x, int y, int z) => {
 				if (walkBlock.Variant == null)
 					return;
@@ -212,28 +226,17 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			delayedMessages.Add(new DelayedMessage(Lang.Get("[BetterEr Prospecting] Expected keys are: {0}", String.Join(", ", ppws.depositsByCode.Keys))));
 		}
 
-		if (!generateReadigs(sapi, serverPlayer, ppws, blockSel.Position, codeToFoundCount, out PropickReading readings, delayedMessages))
-			return;
-
-		addMiscReadings(sapi, serverPlayer, readings, blockSel.Position, delayedMessages);
-
-		var textResults = readings.ToHumanReadable(serverPlayer.LanguageCode, ppws.pageCodes);
-		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, textResults, EnumChatType.Notification);
-
-		if (config.DebugMode) {
-			delayedMessages.ForEach(msg => msg.Send(serverPlayer));
-		}
-
-		world.Api.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(readings, serverPlayer);
-
+		if (!generateReadigs(sapi, serverPlayer, blockSel.Position, codeToFoundCount, out readings, ref delayedMessages))
+			return false;
+		return true;
 	}
 
 	// Radius-based search
-	protected virtual void ProbeProximity(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	protected virtual void ProbeProximity(IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.ProximityDmg;
 		int radius = config.ProximitySearchRadius;
 
-		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
+		if (!breakIsPropickable(byPlayer, blockSel, ref damage))
 			return;
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
@@ -263,11 +266,11 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Radius-based search
-	protected virtual void ProbeStone(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	protected virtual void ProbeStone(IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.StoneDmg;
 		int walkRadius = config.StoneSearchRadius;
 
-		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
+		if (!breakIsPropickable(byPlayer, blockSel, ref damage))
 			return;
 
 		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
@@ -335,10 +338,10 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Line-based search
-	protected virtual void ProbeBorehole(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	protected virtual void ProbeBorehole(IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.BoreholeDmg;
 
-		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
+		if (!breakIsPropickable(byPlayer, blockSel, ref damage))
 			return;
 
 
@@ -361,7 +364,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		}
 
 		StringBuilder sb = new StringBuilder();
-		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
+		ppws ??= ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
 
 		sb.Append(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken. "));
 

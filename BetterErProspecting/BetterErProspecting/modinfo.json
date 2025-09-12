@@ -15,7 +15,7 @@
     "Gnomp"
   ],
   "description": "A compilation of configurable ProPick features.",
-  "version": "1.1.8",
+  "version": "0.9.0",
   "Side": "Universal",
   "dependencies": {
     "game": "*"
