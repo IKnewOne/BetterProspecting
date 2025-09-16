@@ -25,6 +25,7 @@ public class BetterErProspectModSystem : Vintagestory.API.Common.ModSystem, IGen
 	}
 	public override void Start(ICoreAPI api) {
 		api.Logger.Debug("[BetterErProspecting] Starting...");
+		base.Start(api);
 
 		harmony = new Harmony(Mod.Info.ModID);
 		Api = api;
@@ -40,8 +41,6 @@ public class BetterErProspectModSystem : Vintagestory.API.Common.ModSystem, IGen
 		}
 
 		PatchUnpatch();
-
-		base.Start(api);
 
 		RegisterCalculator<DiscDepositGenerator>((dGen, variant, empiricalValue) => DiscDistributionCalculator.getPercentileOfEmpiricalValue(dGen, variant, empiricalValue));
 		api.RegisterItemClass("ItemBetterErProspectingPick", typeof(ItemBetterErProspectingPick));

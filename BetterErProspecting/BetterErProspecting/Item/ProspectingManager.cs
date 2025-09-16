@@ -160,21 +160,20 @@ public partial class ItemBetterErProspectingPick {
 
 		// Hydrate Or Diedrate
 		if (sapi.ModLoader.IsModEnabled("hydrateordiedrate")) {
-			hydrateOrDiedrate(sapi, readings, pos, delayedMessages);
+
+			HydrateOrDiedrateModSystem system = sapi.ModLoader.GetModSystem<HydrateOrDiedrateModSystem>();
+			if (new Version(system.Mod.Info.Version) < new Version("2.2.12")) {
+				delayedMessages.Add(new DelayedMessage("[BetterEr Prospecting] Please update HydrateOrDietrade for aquifer support"));
+			} else {
+				hydrateOrDiedrate(sapi, readings, pos, delayedMessages);
+			}
 		}
 
 		return delayedMessages;
 	}
+
 	private static void hydrateOrDiedrate(ICoreServerAPI sapi, PropickReading readings, BlockPos pos, List<DelayedMessage> delayedMessages) {
 		var world = sapi.World;
-
-		HydrateOrDiedrateModSystem system = sapi.ModLoader.GetModSystem<HydrateOrDiedrateModSystem>();
-
-		if (new Version(system.Mod.Info.Version) < new Version("2.2.12")) {
-			delayedMessages.Add(new DelayedMessage("[BetterEr Prospecting] Please update HydrateOrDietrade for aquifer support"));
-			return;
-		}
-
 		var chnData = AquiferManager.GetAquiferChunkData(world, pos)?.Data;
 		if (chnData == null) {
 			return;
