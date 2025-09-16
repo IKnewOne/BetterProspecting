@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Text;
 using BetterErProspecting.Item.Data;
 using HydrateOrDiedrate;
-using HydrateOrDiedrate.Aquifer;
-using HydrateOrDiedrate.Aquifer.ModData;
+using HydrateOrDiedrate.Wells.Aquifer;
+using HydrateOrDiedrate.Wells.Aquifer.ModData;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.Datastructures;
@@ -157,19 +157,27 @@ public partial class ItemBetterErProspectingPick {
 	}
 	private static List<DelayedMessage> addMiscReadings(ICoreServerAPI sapi, IServerPlayer serverPlayer, PropickReading readings, BlockPos pos, List<DelayedMessage> delayedMessages = null) {
 		delayedMessages ??= new List<DelayedMessage>();
-
 		// Hydrate Or Diedrate
 		if (sapi.ModLoader.IsModEnabled("hydrateordiedrate")) {
-
-			HydrateOrDiedrateModSystem system = sapi.ModLoader.GetModSystem<HydrateOrDiedrateModSystem>();
-			if (new Version(system.Mod.Info.Version) < new Version("2.2.12")) {
-				delayedMessages.Add(new DelayedMessage("[BetterEr Prospecting] Please update HydrateOrDietrade for aquifer support"));
-			} else {
+			if (isHoDCompat(sapi, ref delayedMessages)) {
 				hydrateOrDiedrate(sapi, readings, pos, delayedMessages);
 			}
 		}
 
 		return delayedMessages;
+	}
+
+	private static bool isHoDCompat(ICoreServerAPI sapi, ref List<DelayedMessage> delayedMessages) {
+		HydrateOrDiedrateModSystem system = sapi.ModLoader.GetModSystem<HydrateOrDiedrateModSystem>();
+		// Latest bump to 2.2.13 due to modified namespace
+		// Blame HoD
+		var minVer = new Version("2.2.13");
+		if (new Version(system.Mod.Info.Version) < minVer) {
+			delayedMessages.Add(new DelayedMessage($"[BetterEr Prospecting] Please update HydrateOrDietrade to at least {minVer.ToString()} for aquifer support"));
+			return false;
+		}
+
+		return true;
 	}
 
 	private static void hydrateOrDiedrate(ICoreServerAPI sapi, PropickReading readings, BlockPos pos, List<DelayedMessage> delayedMessages) {

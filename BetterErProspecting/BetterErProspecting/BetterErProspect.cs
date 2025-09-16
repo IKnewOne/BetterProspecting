@@ -10,7 +10,8 @@ using Vintagestory.ServerMods;
 
 namespace BetterErProspecting;
 
-public class BetterErProspectModSystem : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider {
+// I swear i won't change modsystem name anymore
+public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider {
 	public static ILogger Logger { get; private set; }
 	public static ICoreAPI Api { get; private set; }
 	public static Harmony harmony { get; private set; }

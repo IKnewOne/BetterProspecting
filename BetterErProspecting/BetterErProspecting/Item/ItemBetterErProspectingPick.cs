@@ -17,7 +17,7 @@ using ModConfig = BetterErProspecting.Config.ModConfig;
 
 namespace BetterErProspecting.Item;
 public partial class ItemBetterErProspectingPick : ItemProspectingPick {
-	public static ILogger Logger => BetterErProspectModSystem.Logger;
+	public static ILogger Logger => BetterErProspect.Logger;
 	ICoreServerAPI sapi;
 	SkillItem[] toolModes;
 	public enum Mode {
@@ -43,7 +43,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		GenerateToolModes(api);
 
 		var deposits = api.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
-		BetterErProspectModSystem.ReloadTools += () => {
+		BetterErProspect.ReloadTools += () => {
 			GenerateToolModes(api);
 		};
 
