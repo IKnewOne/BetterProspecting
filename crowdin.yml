@@ -1,3 +1,3 @@
 files:
   - source: /BetterErProspecting/BetterErProspecting/assets/bettererprospecting/lang/en.json
-    translation: /BetterErProspecting/BetterErProspecting/assets/bettererprospecting/lang/%two_letters_code%.json
+    translation: '%original_path%/%two_letters_code%.json'
