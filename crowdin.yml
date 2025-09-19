@@ -1,6 +1,3 @@
 files:
   - source: /BetterErProspecting/BetterErProspecting/assets/bettererprospecting/lang/en.json
     translation: '%original_path%/%two_letters_code%.json'
-
-
-preserve_hierarchy: false
