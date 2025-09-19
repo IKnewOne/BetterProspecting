@@ -58,9 +58,9 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			// Density mode (two possible names, same SkillItem)
 			if (config.EnableDensityMode) {
 				if (config.NewDensityMode) {
-					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, real blocks based search)");
+					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, chance based search)"); // This is a real vanilla lang string lmao
 				} else {
-					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, statistic based search)");
+					modeDataStorage[Mode.density].Skill.Name = Lang.Get("bettererprospecting:density-block-based");
 				}
 				modes.Add(modeDataStorage[Mode.density].Skill);
 			}
@@ -68,25 +68,25 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 			// Node mode
 			if (api.World.Config.GetAsInt("propickNodeSearchRadius") > 0) {
-				modeDataStorage[Mode.node].Skill.Name = Lang.Get("Node Search Mode (Medium range, exact search)");
+				modeDataStorage[Mode.node].Skill.Name = Lang.Get("bettererprospecting:node");
 				modes.Add(modeDataStorage[Mode.node].Skill);
 			}
 
 			// Proximity mode
 			if (config.AddProximityMode) {
-				modeDataStorage[Mode.proximity].Skill.Name = Lang.Get("Proximity (Short range, exact search)");
+				modeDataStorage[Mode.proximity].Skill.Name = Lang.Get("bettererprospecting:proximity");
 				modes.Add(modeDataStorage[Mode.proximity].Skill);
 			}
 
 			// Borehole mode
 			if (config.AddBoreHoleMode) {
-				modeDataStorage[Mode.borehole].Skill.Name = Lang.Get("Borehole Mode (Vertical line based search)");
+				modeDataStorage[Mode.borehole].Skill.Name = Lang.Get("bettererprospecting:borehole");
 				modes.Add(modeDataStorage[Mode.borehole].Skill);
 			}
 
 			// Stone mode
 			if (config.AddStoneMode) {
-				modeDataStorage[Mode.stone].Skill.Name = Lang.Get("Stone Mode (Long range, distance search for stone)");
+				modeDataStorage[Mode.stone].Skill.Name = Lang.Get("bettererprospecting:stone");
 				modes.Add(modeDataStorage[Mode.stone].Skill);
 			}
 
@@ -208,8 +208,8 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			});
 
 		if (nopageVariant.Count > 0) {
-			delayedMessages.Add(new DelayedMessage(Lang.Get("[BetterEr Prospecting] Found ore keys not in the ppws prospectable list. Is it intentional ? : {0}", String.Join(", ", nopageVariant))));
-			delayedMessages.Add(new DelayedMessage(Lang.Get("[BetterEr Prospecting] Expected keys are: {0}", String.Join(", ", ppws.depositsByCode.Keys))));
+			delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key", String.Join(", ", nopageVariant))));
+			delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key-expected", String.Join(", ", ppws.depositsByCode.Keys))));
 		}
 
 		if (!generateReadigs(sapi, serverPlayer, ppws, blockSel.Position, codeToFoundCount, out PropickReading readings, delayedMessages))
@@ -256,9 +256,9 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			});
 
 		if (closestOre != -1) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Closest ore is {0} blocks away!", closestOre), EnumChatType.Notification);
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:closest-ore-is", closestOre), EnumChatType.Notification);
 		} else {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No ore found in {0} block radius.", radius), EnumChatType.Notification);
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:closest-ore-not-found", radius), EnumChatType.Notification);
 		}
 	}
 
@@ -276,7 +276,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		StringBuilder sb = new StringBuilder();
 
-		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"Area sample taken for a radius of {walkRadius}:"));
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:area-sample", walkRadius));
 
 		// Int is either distance or count
 		Dictionary<string, int> rockInfo = new Dictionary<string, int>();
@@ -302,11 +302,11 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			});
 
 		if (rockInfo.Count == 0) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "No rocks neaby"), EnumChatType.Notification);
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:no-rocks-near"), EnumChatType.Notification);
 			return;
 		}
 
-		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following rock types"));
+		sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:found-rocks"));
 
 
 		int totalRocks = rockInfo.Values.Sum();
@@ -327,7 +327,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 				percent = percent > 0.01 ? percent : 0.01;
 				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {percent:0.##} %"));
 			} else {
-				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, $"{itemLink}: {amount} block(s) away"));
+				sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:stone-mode-blocks-away", itemLink, amount));
 			}
 
 		}
@@ -350,20 +350,20 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 
 		if (!config.BoreholeScansOre && !config.BoreholeScansStone) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Borehole has not been configured to search for either type"), EnumChatType.Notification);
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:borehole-no-filter"), EnumChatType.Notification);
 			return;
 		}
 
 		// It's MY mod. And i get to decide what's important for immersion:tm:
 		if (face != BlockFacing.UP) {
-			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "Bore samples can only be taken from upper side of the block"), EnumChatType.Notification);
+			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:borehole-sample-upside"), EnumChatType.Notification);
 			return;
 		}
 
 		StringBuilder sb = new StringBuilder();
 		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
 
-		sb.Append(Lang.GetL(serverPlayer.LanguageCode, "Bore sample taken. "));
+		sb.Append(Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:borehole-sample-taken"));
 
 		// Need to hold unique insertion order. OrderedHashSet where art thou ?
 		var blockKeys = new OrderedDictionary<string, string>();
@@ -388,9 +388,9 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		if (blockKeys.Count == 0) {
 			sb.AppendLine();
-			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "No results found"));
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:borehole-not-found"));
 		} else {
-			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "Found the following: "));
+			sb.AppendLine(Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:borehole-found"));
 			var linkedNames = blockKeys.Select(kv => getHandbookLinkOrName(world, serverPlayer, kv.Key, handbookUrl: blockKeys[kv.Key])).ToList();
 			sb.AppendLine(string.Join(", ", linkedNames));
 		}
