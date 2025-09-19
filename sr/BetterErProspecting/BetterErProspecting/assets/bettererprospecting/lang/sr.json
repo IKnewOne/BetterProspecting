@@ -1,0 +1,20 @@
+{
+  "density-block-based": "Density Search Mode (Long range, statistic based search)",
+  "node": "Node Search Mode (Medium range, exact search)",
+  "proximity": "Proximity (Short range, exact search)",
+  "borehole": "Borehole Mode (Vertical line based search)",
+  "stone": "Stone Mode (Long range, distance search for stone)",
+  "debug-bad-ppws-key": "[BetterEr Prospecting] Found ore keys not in the ppws prospectable list. Is it intentional ? : {0}",
+  "debug-bad-ppws-key-expected": "[BetterEr Prospecting] Expected keys are: {0}",
+  "closest-ore-is": "Closest ore is {0} blocks away!",
+  "closest-ore-not-found": "No ore found in {0} block radius.",
+  "area-sample": "Area sample taken for a radius of {0}:",
+  "no-rocks-near": "No rocks neaby",
+  "found-rocks": "Found the following rock types",
+  "stone-mode-blocks-away": "{0}: {1} block(s) away",
+  "borehole-no-filter": "Borehole has not been configured to search for either type",
+  "borehole-sample-upside": "Bore samples can only be taken from upper side of the block",
+  "borehole-sample-taken": "Bore sample taken. ",
+  "borehole-not-found": "No results found",
+  "borehole-found": "Found the following: "
+}
