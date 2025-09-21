@@ -6,6 +6,7 @@ using BetterErProspecting.Item;
 using ConfigLib;
 using HarmonyLib;
 using Vintagestory.API.Common;
+using Vintagestory.API.Server;
 using Vintagestory.ServerMods;
 
 namespace BetterErProspecting;
@@ -23,6 +24,10 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 	/// </summary>
 	public void RegisterCalculator<TGenerator>(System.Func<TGenerator, DepositVariant, int, double> calculator) where TGenerator : DepositGeneratorBase {
 		CalculatorManager.GeneratorToPercentileCalculator[typeof(TGenerator)] = (genBase, variant, empirical) => calculator((TGenerator)genBase, variant, empirical);
+	}
+
+	public override void StartServerSide(ICoreServerAPI api) {
+		base.StartServerSide(api);
 	}
 	public override void Start(ICoreAPI api) {
 		api.Logger.Debug("[BetterErProspecting] Starting...");

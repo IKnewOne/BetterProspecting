@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using BetterErProspecting.Item.Data;
+using BetterErProspecting.Prospecting;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
@@ -20,6 +21,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	public static ILogger Logger => BetterErProspect.Logger;
 	ICoreServerAPI sapi;
 	SkillItem[] toolModes;
+	ProspectingSystem prospectingSystem;
 	public enum Mode {
 		density,
 		node,
@@ -46,6 +48,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		BetterErProspect.ReloadTools += () => {
 			GenerateToolModes(api);
 		};
+		prospectingSystem = api.ModLoader.GetModSystem<ProspectingSystem>();
 
 		base.OnLoaded(api);
 	}
@@ -168,63 +171,21 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		if (serverPlayer == null)
 			return;
 
-		int radius = GlobalConstants.ChunkSize;
-		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockSel.Position);
-		int chunkBlocks = radius * radius * mapHeight;
-
-		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
-
-		BlockPos searchedBlock = blockSel.Position.Copy();
-
 		List<DelayedMessage> delayedMessages = new List<DelayedMessage>();
 
-		var cache = new Dictionary<string, string>();
-		Dictionary<string, int> codeToFoundCount = new();
-		HashSet<string> nopageVariant = new HashSet<string>();
-		var depositKeys = new HashSet<string>(ppws.depositsByCode.Keys);
+		Dictionary<string, int> codeToFoundCount = ProspectingSystem.GenerateBlockData(sapi, blockSel.Position, delayedMessages);
 
-		string[] knownBlacklistedCodes = ["flint", "quartz"];
 
-		api.World.BlockAccessor.WalkBlocks(new BlockPos(searchedBlock.X - radius, mapHeight, searchedBlock.Z - radius), new BlockPos(searchedBlock.X + radius, 0, searchedBlock.Z + radius),
-			(Block walkBlock, int x, int y, int z) => {
-				if (walkBlock.Variant == null)
-					return;
+		if (!ProspectingSystem.generateReadigs(sapi, serverPlayer, blockSel.Position, codeToFoundCount, out PropickReading readings, delayedMessages)) { return; }
 
-				string key;
-
-				bool isOre = IsOre(walkBlock, cache, out string fullKey, out key);
-				bool isRock = !isOre && IsRock(walkBlock, cache, out fullKey, out key);
-
-				if (isOre || isRock) {
-					if (knownBlacklistedCodes.Contains(key))
-						return;
-
-					if (depositKeys.Contains(key)) {
-						codeToFoundCount[key] = codeToFoundCount.GetValueOrDefault(key, 0) + 1;
-					} else if (isOre) {
-						nopageVariant.Add(key);
-					}
-				}
-			});
-
-		if (nopageVariant.Count > 0) {
-			delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key", String.Join(", ", nopageVariant))));
-			delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key-expected", String.Join(", ", ppws.depositsByCode.Keys))));
-		}
-
-		if (!generateReadigs(sapi, serverPlayer, ppws, blockSel.Position, codeToFoundCount, out PropickReading readings, delayedMessages))
-			return;
-
-		addMiscReadings(sapi, serverPlayer, readings, blockSel.Position, delayedMessages);
+		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(world.Api, "propickworkspace");
 
 		var textResults = readings.ToHumanReadable(serverPlayer.LanguageCode, ppws.pageCodes);
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, textResults, EnumChatType.Notification);
 
-		if (config.DebugMode) {
-			delayedMessages.ForEach(msg => msg.Send(serverPlayer));
-		}
+		if (config.DebugMode) { delayedMessages.ForEach(msg => msg.Send(serverPlayer)); }
 
-		world.Api.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(readings, serverPlayer);
+		sapi.ModLoader.GetModSystem<ModSystemOreMap>()?.DidProbe(readings, serverPlayer);
 
 	}
 
@@ -428,6 +389,14 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 	public override void OnUnloaded(ICoreAPI api) {
 		foreach (var item in modeDataStorage?.Values) { item?.Skill?.Dispose(); }
+		prospectingSystem = null;
+
+		int num = 0;
+		while (toolModes != null && num < toolModes.Length) {
+			toolModes[num]?.Dispose();
+			num++;
+		}
+
 		base.OnUnloaded(api);
 	}
 
