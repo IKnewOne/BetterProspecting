@@ -19,8 +19,9 @@ public static class DiscDistributionCalculator {
 		int sampledRadius
 	) {
 		float scaleFactor = ((float)sampledRadius * sampledRadius) / 256f; // 2r*2r/32*32 = 4r^2/1024 = r^2/256
-		scaleFactor /= 2; // Found this useful to make the game not exhausting. Subject to change
-		float scaledTries = variant.TriesPerChunk * scaleFactor;
+
+		/*float scaledTries = variant.TriesPerChunk * scaleFactor;*/
+		float scaledTries = variant.TriesPerChunk; // I'll keep the factor behaviour as it is for now
 
 		// If only one is, its variance will disappear and math will be fine
 		if (dGen.Radius.dist == EnumDistribution.DIRAC && dGen.Thickness.dist == EnumDistribution.DIRAC) {
