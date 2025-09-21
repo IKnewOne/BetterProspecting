@@ -165,7 +165,7 @@ public class ProspectingSystem : ModSystem {
 		}
 
 		int radius = GlobalConstants.ChunkSize;
-		int zoneSize = 20 * radius;
+		int zoneSize = 2 * radius;
 
 		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockPos);
 		int chunkBlocks = zoneSize * zoneSize * mapHeight;
