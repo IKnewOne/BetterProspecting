@@ -22,8 +22,8 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 	/// <summary>
 	/// Registers a percentile calculation method for a generator type. Making sure it's above vanilla's detector 0.025 is your job if you want that
 	/// </summary>
-	public void RegisterCalculator<TGenerator>(System.Func<TGenerator, DepositVariant, int, double> calculator) where TGenerator : DepositGeneratorBase {
-		CalculatorManager.GeneratorToPercentileCalculator[typeof(TGenerator)] = (genBase, variant, empirical) => calculator((TGenerator)genBase, variant, empirical);
+	public void RegisterCalculator<TGenerator>(System.Func<TGenerator, DepositVariant, int, int, double> calculator) where TGenerator : DepositGeneratorBase {
+		CalculatorManager.GeneratorToPercentileCalculator[typeof(TGenerator)] = (genBase, variant, empirical, sampledRadius) => calculator((TGenerator)genBase, variant, empirical, sampledRadius);
 	}
 
 	public override void StartServerSide(ICoreServerAPI api) {
@@ -48,7 +48,7 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 
 		PatchUnpatch();
 
-		RegisterCalculator<DiscDepositGenerator>((dGen, variant, empiricalValue) => DiscDistributionCalculator.getPercentileOfEmpiricalValue(dGen, variant, empiricalValue));
+		RegisterCalculator<DiscDepositGenerator>((dGen, variant, empiricalValue, sampledRadius) => DiscDistributionCalculator.getPercentileOfEmpiricalValue(dGen, variant, empiricalValue, sampledRadius));
 		api.RegisterItemClass("ItemBetterErProspectingPick", typeof(ItemBetterErProspectingPick));
 	}
 

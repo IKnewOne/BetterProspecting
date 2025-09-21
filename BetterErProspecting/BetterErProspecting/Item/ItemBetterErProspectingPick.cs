@@ -22,6 +22,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	ICoreServerAPI sapi;
 	SkillItem[] toolModes;
 	ProspectingSystem prospectingSystem;
+	public const int densityRadius = GlobalConstants.ChunkSize;
 	public enum Mode {
 		density,
 		node,

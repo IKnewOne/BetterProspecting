@@ -49,7 +49,7 @@ public class ProspectingSystem : ModSystem {
 		// Background
 		Task.Run(() => { ReprospectTask(args); });
 
-		return TextCommandResult.Success("Began");
+		return TextCommandResult.Success("[BetterEr Prospect] Began reprospecting");
 	}
 	private Task ReprospectTask(TextCommandCallingArgs args) {
 		var caller = args.Caller.Player as IServerPlayer;
@@ -110,7 +110,9 @@ public class ProspectingSystem : ModSystem {
 
 	public static Dictionary<string, int> GenerateBlockData(ICoreServerAPI api, BlockPos blockPos, List<DelayedMessage> delayedMessages = null) {
 		delayedMessages ??= new List<DelayedMessage>();
-		int radius = GlobalConstants.ChunkSize;
+
+		int radius = ItemBetterErProspectingPick.densityRadius;
+
 		int mapHeight = api.World.BlockAccessor.GetTerrainMapheightAt(blockPos);
 		string[] knownBlacklistedCodes = ["flint", "quartz"];
 
@@ -164,11 +166,11 @@ public class ProspectingSystem : ModSystem {
 
 		}
 
-		int radius = GlobalConstants.ChunkSize;
-		int zoneSize = 2 * radius;
+		int radius = ItemBetterErProspectingPick.densityRadius;
 
 		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockPos);
-		int chunkBlocks = zoneSize * zoneSize * mapHeight;
+		int zoneDiameter = 2 * radius;
+		int zoneBlocks = zoneDiameter * zoneDiameter * mapHeight;
 
 		var pos = blockPos;
 		readings = new PropickReading();
@@ -183,12 +185,12 @@ public class ProspectingSystem : ModSystem {
 
 
 			var reading = new OreReading();
-			reading.PartsPerThousand = (double)empiricalAmount / chunkBlocks * 1000;
+			reading.PartsPerThousand = (double)empiricalAmount / zoneBlocks * 1000;
 
 			DepositVariant variant = ppws.depositsByCode[oreCode];
 			var generator = variant.GeneratorInst;
 
-			double? totalFactor = CalculatorManager.GetPercentile(generator, variant, empiricalAmount);
+			double? totalFactor = CalculatorManager.GetPercentile(generator, variant, empiricalAmount, radius);
 
 			if (totalFactor == null) {
 				sb.Append($"[BetterEr Prospecting] Found no predefined calculator for {generator.GetType()})");

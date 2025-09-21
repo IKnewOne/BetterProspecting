@@ -10,16 +10,21 @@ public static class DiscDistributionCalculator {
 	/// <summary>
 	/// Computes the percentile of an empirical value of seen blocks
 	/// Uses log-normal approximation for efficiency.
+	/// Sampled radius is needed for normalization if we ever sample > 1 chunk. If we sample a ~ chunk ( 32x32 blocks ), we provide 32/2 = 16 sampled radius
 	/// </summary>
 	public static double getPercentileOfEmpiricalValue(
 		DiscDepositGenerator dGen,
 		DepositVariant variant,
-		int empiricalValue
+		int empiricalValue,
+		int sampledRadius
 	) {
+		float scaleFactor = ((float)sampledRadius * sampledRadius) / 256f; // 2r*2r/32*32 = 4r^2/1024 = r^2/256
+		scaleFactor /= 2; // Found this useful to make the game not exhausting. Subject to change
+		float scaledTries = variant.TriesPerChunk * scaleFactor;
 
 		// If only one is, its variance will disappear and math will be fine
 		if (dGen.Radius.dist == EnumDistribution.DIRAC && dGen.Thickness.dist == EnumDistribution.DIRAC) {
-			double exact = (dGen.Thickness.avg + dGen.Thickness.offset) * Math.Pow(dGen.Radius.avg + dGen.Radius.offset, 2) * Math.PI * variant.TriesPerChunk;
+			double exact = (dGen.Thickness.avg + dGen.Thickness.offset) * Math.Pow(dGen.Radius.avg + dGen.Radius.offset, 2) * Math.PI * scaledTries;
 
 			if (empiricalValue < exact)
 				return 0.15;// Per dirac this should be 0, but if we're here, it means we've found some ore
@@ -38,7 +43,7 @@ public static class DiscDistributionCalculator {
 		double thicknessStd = GetNatFloatStd(dGen.Thickness);
 
 		// --- Step 2: Log-transform approximation ---
-		// log(Y) = log(thicknessAvg) + 2*log(radiusAvg) + log(pi * triesPerChunk)
+		// log(Y) = log(thicknessAvg) + 2*log(radiusAvg) + log(pi * scaledTries)
 		double logEmpirical = Math.Log(empiricalValue + 0.5); // + 0.5 = continuity
 
 		// Approximate mean & variance in log-space using delta method
@@ -49,7 +54,7 @@ public static class DiscDistributionCalculator {
 		double logRadiusVar = Math.Pow(radiusStd / radiusMean, 2);
 		double logThicknessVar = Math.Pow(thicknessStd / thicknessMean, 2);
 
-		double logMean = (logThicknessMean - 0.5 * logThicknessVar) + 2.0 * (logRadiusMean - 0.5 * logRadiusVar) + Math.Log(Math.PI * variant.TriesPerChunk);
+		double logMean = (logThicknessMean - 0.5 * logThicknessVar) + 2.0 * (logRadiusMean - 0.5 * logRadiusVar) + Math.Log(Math.PI * scaledTries);
 		double logStd = Math.Sqrt(logThicknessVar + 4.0 * logRadiusVar);  // 2*log(radius) → factor squared
 
 		// --- Step 3: Compute percentile from Gaussian CDF ---
