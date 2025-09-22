@@ -4,6 +4,8 @@ public class ModConfig {
 	public static string ConfigName = "BetterErProspecting.json";
 	public static ModConfig Instance { get; set; } = new ModConfig();
 
+	public static int BoreholeRadius = 8;
+
 	public bool EnableDensityMode = true;
 	public bool OneShotDensity = false;
 

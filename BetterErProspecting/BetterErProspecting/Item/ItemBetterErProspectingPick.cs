@@ -296,9 +296,10 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
 	}
 
-	// Line-based search
+	// Cylinder Search
 	protected virtual void ProbeBorehole(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.BoreholeDmg;
+		int radius = ModConfig.BoreholeRadius;
 
 		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
@@ -333,20 +334,16 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		BlockPos blockPos = blockSel.Position.Copy();
 
-		//Walk unreliable
-		while (blockPos.Y > 0) {
-			Block sBlock = api.World.BlockAccessor.GetBlock(blockPos);
-
-			if (config.BoreholeScansOre && IsOre(sBlock, cache, out string fullKey, out string oreKey)) {
+		this.WalkBlocksCylinder(blockPos, radius, (walkBlock, x, y, z) => {
+			if (config.BoreholeScansOre && IsOre(walkBlock, cache, out string fullKey, out string oreKey)) {
 				var oreHandbook = ppws.depositsByCode.GetValueOrDefault(oreKey, null)?.HandbookPageCode;
 				blockKeys.TryAdd(fullKey, oreHandbook);
 			} else
-			if (config.BoreholeScansStone && IsRock(sBlock, cache, out fullKey, out string rockKey)) {
+			if (config.BoreholeScansStone && IsRock(walkBlock, cache, out fullKey, out string rockKey)) {
 				blockKeys.TryAdd(fullKey, null);
 			}
 
-			blockPos.Y--;
-		}
+		});
 
 		if (blockKeys.Count == 0) {
 			sb.AppendLine();

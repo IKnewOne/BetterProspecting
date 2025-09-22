@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
+using Vintagestory.API.MathTools;
 using Vintagestory.API.Server;
 using Vintagestory.GameContent;
 
@@ -35,6 +36,27 @@ public partial class ItemBetterErProspectingPick {
 
 		return suffix;
 	}
+
+	public void WalkBlocksCylinder(BlockPos startPos, int radius, Action<Block, int, int, int> onBlock) {
+		var ba = sapi.World.BlockAccessor;
+		int startX = startPos.X;
+		int startY = startPos.InternalY;
+		int startZ = startPos.Z;
+
+		for (int y = startY; y > 0; y--) {
+			for (int x = startX - radius; x <= startX + radius; x++) {
+				for (int z = startZ - radius; z <= startZ + radius; z++) {
+					int dx = x - startX;
+					int dz = z - startZ;
+					if (dx * dx + dz * dz <= radius * radius) {
+						var block = ba.GetBlock(new BlockPos(x, y, z));
+						onBlock(block, x, y, z);
+					}
+				}
+			}
+		}
+	}
+
 	public static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key, string itemName = null, string handbookUrl = null) {
 		itemName ??= Lang.GetL(serverPlayer.LanguageCode, key);
 
