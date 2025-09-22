@@ -173,6 +173,18 @@
       "weight": 4.2
     },
     {
+      "code": "BoreholeRadius",
+      "ingui": "Borehole Radius",
+      "type": "integer",
+      "comment": "Radius for borehole mode",
+      "default": 8,
+      "range": {
+        "min": 1,
+        "max": 10
+      },
+      "weight": 4.25
+    },
+    {
       "type": "separator",
       "text": "At least one must be selected",
       "weight": 4.3
