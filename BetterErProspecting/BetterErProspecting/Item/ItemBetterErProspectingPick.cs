@@ -299,7 +299,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	// Cylinder Search
 	protected virtual void ProbeBorehole(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.BoreholeDmg;
-		int radius = ModConfig.BoreholeRadius;
+		int radius = config.BoreholeRadius;
 
 		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
