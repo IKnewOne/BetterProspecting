@@ -3,9 +3,11 @@
 namespace BetterErProspecting.Prospecting;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using BetterErProspecting.Config;
 using BetterErProspecting.Item;
@@ -51,49 +53,104 @@ public class ProspectingSystem : ModSystem {
 
 		return TextCommandResult.Success("[BetterEr Prospect] Began reprospecting");
 	}
-	private Task ReprospectTask(TextCommandCallingArgs args) {
+	private readonly ConcurrentDictionary<(int, int), Task> chunkLoadTasks = new();
+
+	private Task EnsureChunkLoaded(int cx, int cz) {
+		return chunkLoadTasks.GetOrAdd((cx, cz), _ => {
+			var tcs = new TaskCompletionSource();
+			var chunk = sapi.WorldManager.GetMapChunk(cx, cz);
+			if (chunk != null) {
+				tcs.SetResult();
+				return tcs.Task;
+			}
+
+			var opts = new ChunkLoadOptions();
+			opts.OnLoaded += () => tcs.TrySetResult();
+			sapi.WorldManager.LoadChunkColumnPriority(cx, cz, opts);
+			return tcs.Task;
+		});
+	}
+
+	// This might create lag or memory issues. Need more feedback on large world/many players
+	private async Task ReprospectTask(TextCommandCallingArgs args) {
 		var caller = args.Caller.Player as IServerPlayer;
 		var targetPlayer = args.Parsers[0].GetValue() as IServerPlayer;
-		try {
-			logger.Notification("[BetterEr Prospecting] Reprospecting started by {0} on player? {1}", caller == null ? "console" : caller.PlayerName, targetPlayer == null ? "all" : targetPlayer);
-			var world = sapi.World;
+		int countSucc = 0;
+		int countUnload = 0;
 
+		try {
+			logger.Notification("[BetterEr Prospecting] Reprospecting started by {0} on player? {1}",
+				caller == null ? "console" : caller.PlayerName,
+				targetPlayer == null ? "all" : targetPlayer);
+
+			var world = sapi.World;
 			var msom = sapi.ModLoader.GetModSystem<ModSystemOreMap>();
 			var oml = sapi.ModLoader.GetModSystem<WorldMapManager>().MapLayers.FirstOrDefault(ml => ml is OreMapLayer) as OreMapLayer;
 
+			if (isReprospecting)
+				return;
+			isReprospecting = true;
+			chunkLoadTasks.Clear(); // Reruns
 
 			// Inject offline players
-			var allplayers = world.AllPlayers;
-			foreach (var player in allplayers) { oml.getOrLoadReadings(player); }
+			var allPlayers = world.AllPlayers;
+			foreach (var player in allPlayers) { oml.getOrLoadReadings(player); }
 
 			foreach (var kvp in oml.PropickReadingsByPlayer) {
 				var player = world.PlayerByUid(kvp.Key) as IServerPlayer;
-				var newReadings = new List<PropickReading>();
+				var readings = kvp.Value;
 
-				foreach (var reading in kvp.Value) {
-					var readingBlock = new BlockPos(reading.Position.XInt, reading.Position.YInt, reading.Position.ZInt);
-					var blData = GenerateBlockData(sapi, readingBlock);
-					generateReadigs(sapi, player, readingBlock, blData, out PropickReading newReading);
-					newReadings.Add(newReading);
+				// Step 1: Collect all unique chunks for this player's readings
+				var chunksToLoad = new HashSet<(int cx, int cz)>();
+				foreach (var reading in readings) {
+					int bx = reading.Position.XInt;
+					int bz = reading.Position.ZInt;
+
+					foreach (var dx in new[] { -32, 0, 32 })
+						foreach (var dz in new[] { -32, 0, 32 }) {
+							int cx = (bx + dx) / GlobalConstants.ChunkSize;
+							int cz = (bz + dz) / GlobalConstants.ChunkSize;
+							chunksToLoad.Add((cx, cz));
+						}
 				}
 
-				// We will probably likely lose a reading that a player did in the middle of this.
-				// Too bad
-				kvp.Value.Clear();
-				newReadings.ForEach(reading => { msom.DidProbe(reading, player); });
+				// Step 2: Ensure all chunks are loaded in parallel
+				await Task.WhenAll(chunksToLoad.Select(c => EnsureChunkLoaded(c.cx, c.cz)));
+
+				// Step 3: Process readings in parallel
+				var updatedReadings = await Task.WhenAll(readings.Select(async reading => {
+					var readingBlock = reading.Position.AsBlockPos;
+					var readingChunk = sapi.WorldManager.GetChunk(readingBlock);
+
+					if (readingChunk == null) {
+						Interlocked.Increment(ref countUnload);
+						return reading;
+					}
+
+					generateReadigs(sapi, player, readingBlock, GenerateBlockData(sapi, readingBlock), out PropickReading newReading);
+					Interlocked.Increment(ref countSucc);
+					return newReading;
+				}));
+
+				// Step 4: Replace readings safely
+				if (updatedReadings.Length > 0) {
+					kvp.Value.Clear();
+					kvp.Value.AddRange(updatedReadings);
+				}
 			}
 
-
-			foreach (var val in oml.PropickReadingsByPlayer) {
-				ISaveGame savegame = sapi.WorldManager.SaveGame;
-				using FastMemoryStream ms = new();
+			// Step 5: Serialize per player in parallel
+			var savegame = sapi.WorldManager.SaveGame;
+			var serializeTasks = oml.PropickReadingsByPlayer.Select(val => Task.Run(() => {
+				using var ms = new FastMemoryStream();
 				savegame.StoreData("oreMapMarkers-" + val.Key, SerializerUtil.Serialize(val.Value, ms));
-			}
+			})).ToArray();
 
-			// Clear offline players from memory
-			var onlineUids = sapi.World.AllOnlinePlayers.Select(p => p.PlayerUID).ToList();
+			await Task.WhenAll(serializeTasks);
+
+			// Step 6: Clear offline players
+			var onlineUids = sapi.World.AllOnlinePlayers.Select(p => p.PlayerUID).ToHashSet();
 			oml.PropickReadingsByPlayer.RemoveAllByKey(uid => onlineUids.Contains(uid));
-
 
 			logger.Notification("[BetterEr Prospecting] Reprospecting finished");
 		} catch (Exception ex) {
@@ -101,10 +158,11 @@ public class ProspectingSystem : ModSystem {
 		} finally {
 			isReprospecting = false;
 			if (caller != null) {
-				caller.SendMessage(GlobalConstants.AllChatGroups, "[BetterEr Prospecting] Finished reprospecting", EnumChatType.Notification);
+				caller.SendMessage(GlobalConstants.AllChatGroups,
+					$"[BetterEr Prospecting] Finished reprospecting. Changed {countSucc} readings. Kept unchanged {countUnload} unloaded chunk readings",
+					EnumChatType.Notification);
 			}
 		}
-		return Task.CompletedTask;
 	}
 
 

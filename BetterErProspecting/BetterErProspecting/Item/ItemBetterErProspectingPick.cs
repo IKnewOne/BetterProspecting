@@ -62,9 +62,9 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			// Density mode (two possible names, same SkillItem)
 			if (config.EnableDensityMode) {
 				if (config.NewDensityMode) {
-					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, chance based search)"); // This is a real vanilla lang string lmao
-				} else {
 					modeDataStorage[Mode.density].Skill.Name = Lang.Get("bettererprospecting:density-block-based");
+				} else {
+					modeDataStorage[Mode.density].Skill.Name = Lang.Get("Density Search Mode (Long range, chance based search)"); // This is a real vanilla lang string lmao
 				}
 				modes.Add(modeDataStorage[Mode.density].Skill);
 			}
