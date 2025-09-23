@@ -1,5 +1,5 @@
 {
-  "version": 17,
+  "version": 19,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -176,10 +176,10 @@
       "code": "BoreholeRadius",
       "ingui": "Borehole Radius",
       "type": "integer",
-      "comment": "Radius for borehole mode",
+      "comment": "Radius for borehole mode. 0 Makes a line",
       "default": 8,
       "range": {
-        "min": 1,
+        "min": 0,
         "max": 10
       },
       "weight": 4.25

@@ -89,11 +89,6 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 	}
 
 	private void PatchUnpatch() {
-		if (ModConfig.Instance.NewDensityMode) {
-			harmony.PatchCategory(nameof(PatchCategory.NewDensityMode));
-		} else {
-			harmony.UnpatchCategory(nameof(PatchCategory.NewDensityMode));
-		}
 	}
 
 	public enum PatchCategory {
