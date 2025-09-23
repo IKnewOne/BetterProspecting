@@ -2,7 +2,7 @@
   "density-block-based": "Density Search Mode (Long range, statistic based search)",
   "node": "Node Search Mode (Medium range, exact search)",
   "proximity": "Proximity (Short range, exact search)",
-  "borehole": "Borehole Mode (Vertical line based search)",
+  "borehole": "Borehole Mode (Vertical cylinder-radius based search)",
   "stone": "Stone Mode (Long range, distance search for stone)",
   "debug-bad-ppws-key": "[BetterEr Prospecting] Found ore keys not in the ppws prospectable list. Is it intentional ? : {0}",
   "debug-bad-ppws-key-expected": "[BetterEr Prospecting] Expected keys are: {0}",
