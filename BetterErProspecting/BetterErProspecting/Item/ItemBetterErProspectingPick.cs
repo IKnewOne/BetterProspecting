@@ -244,11 +244,12 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		Dictionary<string, int> rockInfo = new Dictionary<string, int>();
 
 		BlockPos blockPos = blockSel.Position.Copy();
+		var blockEnd = blockPos.AddCopy(-walkRadius, 0, -walkRadius);
+		blockEnd.Y = 1;
 		var cache = new Dictionary<string, string>();
-		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockPos.AddCopy(-walkRadius, -walkRadius, -walkRadius),
+		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockEnd,
 			(walkBlock, x, y, z) => {
 				if (IsRock(walkBlock, cache, out string key)) {
-
 					if (config.StonePercentSearch) {
 						int count = rockInfo.GetValueOrDefault(key, 0);
 						rockInfo[key] = ++count;
