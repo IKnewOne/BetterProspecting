@@ -190,7 +190,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 	}
 
-	// Radius-based search
+	// Sphere search
 	protected virtual void ProbeProximity(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.ProximityDmg;
 		int radius = config.ProximitySearchRadius;
@@ -206,16 +206,15 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		int closestOre = -1;
 		var cache = new Dictionary<string, string>();
 
-		api.World.BlockAccessor.WalkBlocks(pos.AddCopy(radius, radius, radius), pos.AddCopy(-radius, -radius, -radius),
-			(walkBlock, x, y, z) => {
-				if (IsOre(walkBlock, cache, out string key)) {
-					var distanceTo = (int)Math.Round(pos.DistanceTo(x, y, z));
+		WalkBlocksSphere(pos, radius, (walkBlock, x, y, z) => {
+			if (IsOre(walkBlock, cache, out string key)) {
+				var distanceTo = (int)Math.Round(pos.DistanceTo(x, y, z));
 
-					if (closestOre == -1 || closestOre > distanceTo) {
-						closestOre = distanceTo;
-					}
+				if (closestOre == -1 || closestOre > distanceTo) {
+					closestOre = distanceTo;
 				}
-			});
+			}
+		});
 
 		if (closestOre != -1) {
 			serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, Lang.GetL(serverPlayer.LanguageCode, "bettererprospecting:closest-ore-is", closestOre), EnumChatType.Notification);
@@ -224,7 +223,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		}
 	}
 
-	// Radius-based search
+	// Square radius-based search
 	protected virtual void ProbeStone(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.StoneDmg;
 		int walkRadius = config.StoneSearchRadius;

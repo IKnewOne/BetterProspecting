@@ -57,6 +57,28 @@ public partial class ItemBetterErProspectingPick {
 		}
 	}
 
+	public void WalkBlocksSphere(BlockPos startPos, int radius, Action<Block, int, int, int> onBlock) {
+		var ba = sapi.World.BlockAccessor;
+		int startX = startPos.X;
+		int startY = startPos.InternalY;
+		int startZ = startPos.Z;
+
+		for (int y = startY - radius; y <= startY + radius; y++) {
+			for (int x = startX - radius; x <= startX + radius; x++) {
+				for (int z = startZ - radius; z <= startZ + radius; z++) {
+					int dx = x - startX;
+					int dy = y - startY;
+					int dz = z - startZ;
+
+					if (dx * dx + dy * dy + dz * dz <= radius * radius) {
+						var block = ba.GetBlock(new BlockPos(x, y, z));
+						onBlock(block, x, y, z);
+					}
+				}
+			}
+		}
+	}
+
 	public static string getHandbookLinkOrName(IWorldAccessor world, IServerPlayer serverPlayer, string key, string itemName = null, string handbookUrl = null) {
 		itemName ??= Lang.GetL(serverPlayer.LanguageCode, key);
 
