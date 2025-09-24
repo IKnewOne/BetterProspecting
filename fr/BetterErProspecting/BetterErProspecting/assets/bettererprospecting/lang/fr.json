@@ -9,12 +9,12 @@
   "closest-ore-is": "Closest ore is {0} blocks away!",
   "closest-ore-not-found": "No ore found in {0} block radius.",
   "area-sample": "Area sample taken for a radius of {0}:",
-  "no-rocks-near": "No rocks neaby",
+  "no-rocks-near": "Aucune roche trouvée dans les environs",
   "found-rocks": "Found the following rock types",
   "stone-mode-blocks-away": "{0}: {1} block(s) away",
   "borehole-no-filter": "Borehole has not been configured to search for either type",
-  "borehole-sample-upside": "Bore samples can only be taken from upper side of the block",
-  "borehole-sample-taken": "Bore sample taken. ",
-  "borehole-not-found": "No results found",
-  "borehole-found": "Found the following: "
+  "borehole-sample-upside": "Les échantillons de foreuse ne sont récupérables que sur la surface d'un bloc",
+  "borehole-sample-taken": "Échantillon de foreuse récupéré ",
+  "borehole-not-found": "Aucun résultat trouvé",
+  "borehole-found": "A trouvé : "
 }
