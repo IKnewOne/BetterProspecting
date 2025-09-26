@@ -15,8 +15,9 @@ public class ModConfig {
 	public int ProximitySearchRadius = 5;
 	public int ProximityDmg = 2;
 
-	public bool AlwaysAddTraceOres = false;
-	public bool AddToPoorOres = false;
+	public bool UpliftTraceOres = false;
+	public bool UpliftToPoorNoGeneratorFound = true;
+	public bool UpliftAllToPoor = false;
 	public bool UsePercentForUndefinedGenerators = false;
 
 	public bool AddStoneMode = true;

@@ -211,6 +211,18 @@ public class ProspectingSystem : ModSystem {
 
 		return codeToFoundCount;
 	}
+
+	// Small generator type instead of full text
+	private static string FormatGeneratorType(Type generatorType) {
+		string fullName = generatorType.ToString();
+		string[] parts = fullName.Split('.');
+		if (parts.Length >= 2) {
+			string corePackage = parts[0];
+			string generatorName = parts[parts.Length - 1];
+			return $"{corePackage}...{generatorName}";
+		}
+		return fullName;
+	}
 	public static bool generateReadigs(ICoreServerAPI sapi, IServerPlayer serverPlayer, BlockPos blockPos, Dictionary<string, int> codeToFoundOre, out PropickReading readings, List<DelayedMessage> delayedMessages = null) {
 		delayedMessages ??= new List<DelayedMessage>();
 
@@ -234,7 +246,10 @@ public class ProspectingSystem : ModSystem {
 		readings = new PropickReading();
 		readings.Position = blockPos.ToVec3d();
 		StringBuilder sb = new StringBuilder();
-		StringBuilder factVisSb = new StringBuilder();
+
+		StringBuilder tracerVis = new StringBuilder();
+		StringBuilder poorVis = new StringBuilder();
+
 		bool didOreLevelUpscale = false;
 
 		foreach (var foundOre in codeToFoundOre) {
@@ -249,11 +264,11 @@ public class ProspectingSystem : ModSystem {
 			var generator = variant.GeneratorInst;
 
 			double? totalFactor = CalculatorManager.GetPercentile(generator, variant, empiricalAmount, radius);
+			bool isNoGeneratorOre = totalFactor == null;
 
 			if (totalFactor == null) {
-				sb.Append($"[BetterEr Prospecting] Found no predefined calculator for {generator.GetType()})");
+				sb.Append($"[BetterEr Prospecting] Found no predefined calculator for {FormatGeneratorType(generator.GetType())} for ore {oreCode}, using default generator");
 
-				sb.Append(", using default generator");
 				IBlockAccessor blockAccess = world.BlockAccessor;
 				int regsize = blockAccess.RegionSize;
 				IMapRegion reg = world.BlockAccessor.GetMapRegion(pos.X / regsize, pos.Z / regsize);
@@ -273,21 +288,39 @@ public class ProspectingSystem : ModSystem {
 
 				totalFactor = imaginationLandFactor;
 
+
 				sb.AppendLine();
 			}
 
-			if (totalFactor <= PropickReading.MentionThreshold) {
-				if (factVisSb.Length == 0) {
-					factVisSb.Append($"[BetterEr Prospecting] Factor is below visibility: {totalFactor:0.####} for {oreCode}");
-				} else {
-					factVisSb.Append($", {totalFactor:0.####} for {oreCode}");
-				}
+			double initialFactor = (double)totalFactor;
+			bool wasUplifted = false;
+			string upliftReason = "";
 
-				if (config.AlwaysAddTraceOres) {
-					if (config.AddToPoorOres) {
-						totalFactor = 0.15; // It's actually ~1.3 but 5 engages monkey brain
+			if (config.UpliftTraceOres) {
+				// Check for poor uplift first (higher priority)
+				if (totalFactor < 0.15 && (config.UpliftAllToPoor || (isNoGeneratorOre && config.UpliftToPoorNoGeneratorFound))) {
+					totalFactor = 0.15;
+					didOreLevelUpscale = true;
+					wasUplifted = true;
+					upliftReason = config.UpliftAllToPoor ? "P-All" : "P-NoGen";
+
+					if (poorVis.Length == 0) {
+						poorVis.Append($"[BetterEr Prospecting] Uplifted to poor: {initialFactor:0.####} -> {totalFactor:0.####} for {oreCode} ({upliftReason})");
 					} else {
-						totalFactor = PropickReading.MentionThreshold + 1e-6;
+						poorVis.Append($", {initialFactor:0.####} -> {totalFactor:0.####} for {oreCode} ({upliftReason})");
+					}
+				}
+				// Only uplift to trace if not already uplifted to poor and below mention threshold
+				else if (!wasUplifted && totalFactor <= PropickReading.MentionThreshold) {
+					totalFactor = PropickReading.MentionThreshold + 1e-6;
+					didOreLevelUpscale = true;
+					wasUplifted = true;
+					upliftReason = "T";
+
+					if (tracerVis.Length == 0) {
+						tracerVis.Append($"[BetterEr Prospecting] Uplifted to trace: {initialFactor:0.####} -> {totalFactor:0.####} for {oreCode}");
+					} else {
+						tracerVis.Append($", {initialFactor:0.####} -> {totalFactor:0.####} for {oreCode}");
 					}
 				}
 			}
@@ -297,17 +330,15 @@ public class ProspectingSystem : ModSystem {
 		}
 
 
-		if (config.DebugMode && (sb.Length > 0 || factVisSb.Length > 0)) {
-			if (didOreLevelUpscale) {
-				factVisSb.AppendLine();
-				factVisSb.AppendLine(config.AddToPoorOres ? "Modified to poor level" : "Modified to trace level");
-			}
-
-			if (factVisSb.Length > 0) {
-				delayedMessages.Add(new DelayedMessage(factVisSb.ToString()));
-			}
+		if (config.DebugMode && (sb.Length > 0 || tracerVis.Length > 0 || poorVis.Length > 0)) {
 			if (sb.Length > 0) {
 				delayedMessages.Add(new DelayedMessage(sb.ToString()));
+			}
+			if (poorVis.Length > 0) {
+				delayedMessages.Add(new DelayedMessage(poorVis.ToString()));
+			}
+			if (tracerVis.Length > 0) {
+				delayedMessages.Add(new DelayedMessage(tracerVis.ToString()));
 			}
 		}
 

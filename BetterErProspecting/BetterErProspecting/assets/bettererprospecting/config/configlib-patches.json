@@ -1,5 +1,5 @@
 {
-  "version": 19,
+  "version": 20,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -51,20 +51,28 @@
       "collapsible": true
     },
     {
-      "code": "AlwaysAddTraceOres",
-      "ingui": "Always add trace ores",
+      "code": "UpliftTraceOres",
+      "ingui": "Uplift ores to trace",
       "type": "boolean",
       "comment": "Readings only display values above 0.0025 factor. Turning this on will add all those even single-block ores as traces, whereas in base game they wouldn't be registered. I'd recommend against enabling.",
       "default": false,
       "weight": 1.91
     },
     {
-      "code": "AddToPoorOres",
-      "ingui": "Add them to poor ores instead",
+      "code": "UpliftToPoorNoGeneratorFound",
+      "ingui": "Uplift all unregistered generators ores to poor instead",
       "type": "boolean",
-      "comment": "Requires the previous setting This would make the PPT values visible, unlike previously. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this.",
-      "default": false,
+      "comment": "Only for ores that do not have a registered generator, i.e. Interesting Ore Gen. Requires the Uplift to trace enabled. This would make the PPT values visible, unlike traces. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this.",
+      "default": true,
       "weight": 1.95
+    },
+    {
+      "code": "UpliftAllToPoor",
+      "ingui": "Uplift all ores to poor instead",
+      "type": "boolean",
+      "comment": "Requires the Uplift to trace enabled. This would make the PPT values visible, unlike previously. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this. Highly unrecommended. If enabled, also supercedes and automatically enables the previous setting. Usually the previous feature is enough.",
+      "default": false,
+      "weight": 1.96
     },
     {
       "type": "separator",
