@@ -1,0 +1,20 @@
+{
+  "density-block-based": "Modo de búsqueda de densidad (rango largo, búsqueda basada en estadísticas)",
+  "node": "Modo de búsqueda de nodos (rango medio, búsqueda exacta)",
+  "proximity": "Proximidad (rango corto, búsqueda exacta)",
+  "borehole": "Modo pozo (búsqueda basada en el radio de cilindros vertical)",
+  "stone": "Modo de Piedra (rango largo, búsqueda de distancia por piedra)",
+  "debug-bad-ppws-key": "[BetterER Prospecting] Se han encontrado claves de mineral que no figuran en la lista prospectable de ppws. ¿Es intencionado? : {0}",
+  "debug-bad-ppws-key-expected": "[BetterER Prospecting] Las claves esperadas son: {0}",
+  "closest-ore-is": "¡El mineral más cercano está a {0} bloques!",
+  "closest-ore-not-found": "No se encontró ningún mineral en el radio de bloque {0}.",
+  "area-sample": "Área de muestra tomada para un radio de {0}:",
+  "no-rocks-near": "Sin rocas cerca",
+  "found-rocks": "Se han encontrado los siguientes tipos de roca",
+  "stone-mode-blocks-away": "{0}: {1} bloque(s) de distancia",
+  "borehole-no-filter": "El pozo no ha sido configurado para buscar cualquier tipo",
+  "borehole-sample-upside": "Las muestras solo se pueden tomar de la parte superior del bloque.",
+  "borehole-sample-taken": "Muestra tomada",
+  "borehole-not-found": "No hay resultados",
+  "borehole-found": "Se encontró lo siguiente: "
+}
