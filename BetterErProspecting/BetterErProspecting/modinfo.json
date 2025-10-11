@@ -12,10 +12,12 @@
     "PurplePi"
   ],
   "contributors": [
+    "NeoB",
+    "qua8ion",
     "Gnomp"
   ],
   "description": "A compilation of configurable ProPick features.",
-  "version": "1.3.0",
+  "version": "1.3.3",
   "Side": "Universal",
   "dependencies": {
     "game": "1.21.1"
