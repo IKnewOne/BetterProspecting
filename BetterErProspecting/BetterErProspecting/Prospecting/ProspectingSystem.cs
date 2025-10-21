@@ -9,9 +9,9 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using BetterErProspecting.Config;
-using BetterErProspecting.Item;
-using BetterErProspecting.Item.Data;
+using Config;
+using Item;
+using Item.Data;
 using HydrateOrDiedrate;
 using HydrateOrDiedrate.Wells.Aquifer;
 using HydrateOrDiedrate.Wells.Aquifer.ModData;
@@ -25,8 +25,7 @@ using Vintagestory.GameContent;
 using Vintagestory.ServerMods;
 
 public class ProspectingSystem : ModSystem {
-
-	public static ModConfig config => ModConfig.Instance;
+	private static ModConfig config => ModConfig.Instance;
 	private static ILogger logger => BetterErProspect.Logger;
 	private bool isReprospecting = false;
 	private ICoreServerAPI sapi;
@@ -96,9 +95,8 @@ public class ProspectingSystem : ModSystem {
 			var allPlayers = world.AllPlayers;
 			foreach (var player in allPlayers) { oml.getOrLoadReadings(player); }
 
-			foreach (var kvp in oml.PropickReadingsByPlayer) {
-				var player = world.PlayerByUid(kvp.Key) as IServerPlayer;
-				var readings = kvp.Value;
+			foreach (var (key, readings) in oml.PropickReadingsByPlayer) {
+				var player = world.PlayerByUid(key) as IServerPlayer;
 
 				// Step 1: Collect all unique chunks for this player's readings
 				var chunksToLoad = new HashSet<(int cx, int cz)>();
@@ -133,10 +131,9 @@ public class ProspectingSystem : ModSystem {
 				}));
 
 				// Step 4: Replace readings safely
-				if (updatedReadings.Length > 0) {
-					kvp.Value.Clear();
-					kvp.Value.AddRange(updatedReadings);
-				}
+				if (updatedReadings.Length <= 0) continue;
+				readings.Clear();
+				readings.AddRange(updatedReadings);
 			}
 
 			// Step 5: Serialize per player in parallel
@@ -157,11 +154,9 @@ public class ProspectingSystem : ModSystem {
 			logger.Error("[BetterEr Prospecting] Error during reprospecting: {0}", ex);
 		} finally {
 			isReprospecting = false;
-			if (caller != null) {
-				caller.SendMessage(GlobalConstants.AllChatGroups,
-					$"[BetterEr Prospecting] Finished reprospecting. Changed {countSucc} readings. Kept unchanged {countUnload} unloaded chunk readings",
-					EnumChatType.Notification);
-			}
+			caller?.SendMessage(GlobalConstants.AllChatGroups,
+				$"[BetterEr Prospecting] Finished reprospecting. Changed {countSucc} readings. Kept unchanged {countUnload} unloaded chunk readings",
+				EnumChatType.Notification);
 		}
 	}
 
@@ -169,7 +164,7 @@ public class ProspectingSystem : ModSystem {
 	public static Dictionary<string, int> GenerateBlockData(ICoreServerAPI api, BlockPos blockPos, List<DelayedMessage> delayedMessages = null) {
 		delayedMessages ??= new List<DelayedMessage>();
 
-		int radius = ItemBetterErProspectingPick.densityRadius;
+		int radius = (int)(ItemBetterErProspectingPick.densityRadius * ModConfig.Instance.OreDetectionMultiplier);
 
 		int mapHeight = api.World.BlockAccessor.GetTerrainMapheightAt(blockPos);
 		string[] knownBlacklistedCodes = ["flint", "quartz"];
@@ -177,37 +172,33 @@ public class ProspectingSystem : ModSystem {
 		var ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(api, "propickworkspace");
 
 		Dictionary<string, int> codeToFoundCount = new();
-		HashSet<string> nopageVariant = new HashSet<string>();
+		var nopageVariant = new HashSet<string>();
 		var depositKeys = new HashSet<string>(ppws.depositsByCode.Keys);
 
 		var blockCache = new Dictionary<string, string>();
 
 		api.World.BlockAccessor.WalkBlocks(new BlockPos(blockPos.X - radius, mapHeight, blockPos.Z - radius), new BlockPos(blockPos.X + radius, 0, blockPos.Z + radius),
-			(Block walkBlock, int x, int y, int z) => {
+			(walkBlock, x, y, z) => {
 				if (walkBlock.Variant == null)
 					return;
 
-				string key;
+				bool isOre = ItemBetterErProspectingPick.IsOre(walkBlock, blockCache, out _, out var key);
+				bool isRock = !isOre && ItemBetterErProspectingPick.IsRock(walkBlock, blockCache, out _, out key);
 
-				bool isOre = ItemBetterErProspectingPick.IsOre(walkBlock, blockCache, out string fullKey, out key);
-				bool isRock = !isOre && ItemBetterErProspectingPick.IsRock(walkBlock, blockCache, out fullKey, out key);
+				if (!isOre && !isRock) return;
+				if (knownBlacklistedCodes.Contains(key))
+					return;
 
-				if (isOre || isRock) {
-					if (knownBlacklistedCodes.Contains(key))
-						return;
-
-					if (depositKeys.Contains(key)) {
-						codeToFoundCount[key] = codeToFoundCount.GetValueOrDefault(key, 0) + 1;
-					} else if (isOre) {
-						nopageVariant.Add(key);
-					}
+				if (depositKeys.Contains(key)) {
+					codeToFoundCount[key] = codeToFoundCount.GetValueOrDefault(key, 0) + 1;
+				} else if (isOre) {
+					nopageVariant.Add(key);
 				}
 			});
 
-		if (nopageVariant.Count > 0) {
-			delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key", String.Join(", ", nopageVariant))));
-			delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key-expected", String.Join(", ", ppws.depositsByCode.Keys))));
-		}
+		if (nopageVariant.Count <= 0) return codeToFoundCount;
+		delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key", string.Join(", ", nopageVariant))));
+		delayedMessages.Add(new DelayedMessage(Lang.Get("bettererprospecting:debug-bad-ppws-key-expected", string.Join(", ", ppws.depositsByCode.Keys))));
 
 		return codeToFoundCount;
 	}
@@ -216,19 +207,17 @@ public class ProspectingSystem : ModSystem {
 	private static string FormatGeneratorType(Type generatorType) {
 		string fullName = generatorType.ToString();
 		string[] parts = fullName.Split('.');
-		if (parts.Length >= 2) {
-			string corePackage = parts[0];
-			string generatorName = parts[parts.Length - 1];
-			return $"{corePackage}...{generatorName}";
-		}
-		return fullName;
+		if (parts.Length < 2) return fullName;
+		string corePackage = parts[0];
+		string generatorName = parts[^1];
+		return $"{corePackage}...{generatorName}";
 	}
 	public static bool generateReadigs(ICoreServerAPI sapi, IServerPlayer serverPlayer, BlockPos blockPos, Dictionary<string, int> codeToFoundOre, out PropickReading readings, List<DelayedMessage> delayedMessages = null) {
-		delayedMessages ??= new List<DelayedMessage>();
+		delayedMessages ??= [];
 
 		var world = sapi.World;
 		LCGRandom Rnd = new LCGRandom(sapi.World.Seed);
-		DepositVariant[] deposits = sapi.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
+		var deposits = sapi.ModLoader.GetModSystem<GenDeposits>()?.Deposits;
 		ProPickWorkSpace ppws = ObjectCacheUtil.TryGet<ProPickWorkSpace>(world.Api, "propickworkspace");
 		if (deposits == null) {
 			readings = null;
@@ -236,29 +225,26 @@ public class ProspectingSystem : ModSystem {
 
 		}
 
-		int radius = ItemBetterErProspectingPick.densityRadius;
+		const int radius = ItemBetterErProspectingPick.densityRadius;
 
 		int mapHeight = world.BlockAccessor.GetTerrainMapheightAt(blockPos);
-		int zoneDiameter = 2 * radius;
+		const int zoneDiameter = 2 * radius;
 		int zoneBlocks = zoneDiameter * zoneDiameter * mapHeight;
 
-		var pos = blockPos;
-		readings = new PropickReading();
-		readings.Position = blockPos.ToVec3d();
+		readings = new PropickReading
+		{
+			Position = blockPos.ToVec3d()
+		};
 		StringBuilder sb = new StringBuilder();
 
 		StringBuilder tracerVis = new StringBuilder();
 		StringBuilder poorVis = new StringBuilder();
 
-		bool didOreLevelUpscale = false;
-
-		foreach (var foundOre in codeToFoundOre) {
-			string oreCode = foundOre.Key;
-			int empiricalAmount = foundOre.Value;
-
-
-			var reading = new OreReading();
-			reading.PartsPerThousand = (double)empiricalAmount / zoneBlocks * 1000;
+		foreach (var (oreCode, empiricalAmount) in codeToFoundOre) {
+			var reading = new OreReading
+			{
+				PartsPerThousand = (double)empiricalAmount / zoneBlocks * 1000
+			};
 
 			DepositVariant variant = ppws.depositsByCode[oreCode];
 			var generator = variant.GeneratorInst;
@@ -271,9 +257,9 @@ public class ProspectingSystem : ModSystem {
 
 				IBlockAccessor blockAccess = world.BlockAccessor;
 				int regsize = blockAccess.RegionSize;
-				IMapRegion reg = world.BlockAccessor.GetMapRegion(pos.X / regsize, pos.Z / regsize);
-				int lx = pos.X % regsize;
-				int lz = pos.Z % regsize;
+				IMapRegion reg = world.BlockAccessor.GetMapRegion(blockPos.X / regsize, blockPos.Z / regsize);
+				int lx = blockPos.X % regsize;
+				int lz = blockPos.Z % regsize;
 
 				IntDataMap2D map = reg.OreMaps[oreCode];
 				int noiseSize = map.InnerSize;
@@ -282,9 +268,9 @@ public class ProspectingSystem : ModSystem {
 				float posZInRegionOre = (float)lz / regsize * noiseSize;
 
 				int oreDist = map.GetUnpaddedColorLerped(posXInRegionOre, posZInRegionOre);
-				int[] blockColumn = ppws.GetRockColumn(pos.X, pos.Z);
+				int[] blockColumn = ppws.GetRockColumn(blockPos.X, blockPos.Z);
 
-				ppws.depositsByCode[oreCode].GeneratorInst.GetPropickReading(pos, oreDist, blockColumn, out double fakePpt, out double imaginationLandFactor);
+				ppws.depositsByCode[oreCode].GeneratorInst.GetPropickReading(blockPos, oreDist, blockColumn, out double fakePpt, out double imaginationLandFactor);
 
 				totalFactor = imaginationLandFactor;
 
@@ -293,16 +279,13 @@ public class ProspectingSystem : ModSystem {
 			}
 
 			double initialFactor = (double)totalFactor;
-			bool wasUplifted = false;
-			string upliftReason = "";
 
-			if (config.UpliftTraceOres) {
+			if (config.UpliftTraceOres)
+			{
 				// Check for poor uplift first (higher priority)
 				if (totalFactor < 0.15 && (config.UpliftAllToPoor || (isNoGeneratorOre && config.UpliftToPoorNoGeneratorFound))) {
 					totalFactor = 0.15;
-					didOreLevelUpscale = true;
-					wasUplifted = true;
-					upliftReason = config.UpliftAllToPoor ? "P-All" : "P-NoGen";
+					var upliftReason = config.UpliftAllToPoor ? "P-All" : "P-NoGen";
 
 					if (poorVis.Length == 0) {
 						poorVis.Append($"[BetterEr Prospecting] Uplifted to poor: {initialFactor:0.####} -> {totalFactor:0.####} for {oreCode} ({upliftReason})");
@@ -311,11 +294,8 @@ public class ProspectingSystem : ModSystem {
 					}
 				}
 				// Only uplift to trace if not already uplifted to poor and below mention threshold
-				else if (!wasUplifted && totalFactor <= PropickReading.MentionThreshold) {
+				else if (totalFactor <= PropickReading.MentionThreshold) {
 					totalFactor = PropickReading.MentionThreshold + 1e-6;
-					didOreLevelUpscale = true;
-					wasUplifted = true;
-					upliftReason = "T";
 
 					if (tracerVis.Length == 0) {
 						tracerVis.Append($"[BetterEr Prospecting] Uplifted to trace: {initialFactor:0.####} -> {totalFactor:0.####} for {oreCode}");
@@ -349,12 +329,12 @@ public class ProspectingSystem : ModSystem {
 	}
 
 	#region Compat
-	private static void addMiscReadings(ICoreServerAPI sapi, IServerPlayer serverPlayer, PropickReading readings, BlockPos blockPos, List<DelayedMessage> delayedMessages) {
+	private static void addMiscReadings(ICoreServerAPI sapi, IServerPlayer serverPlayer, PropickReading readings, BlockPos blockPos, List<DelayedMessage> delayedMessages)
+	{
 		// Hydrate Or Diedrate
-		if (sapi.ModLoader.IsModEnabled("hydrateordiedrate")) {
-			if (isHoDCompat(sapi, delayedMessages)) {
-				hydrateOrDiedrate(sapi, readings, blockPos, delayedMessages);
-			}
+		if (!sapi.ModLoader.IsModEnabled("hydrateordiedrate")) return;
+		if (isHoDCompat(sapi, delayedMessages)) {
+			hydrateOrDiedrate(sapi, readings, blockPos, delayedMessages);
 		}
 	}
 
@@ -379,12 +359,10 @@ public class ProspectingSystem : ModSystem {
 		// Latest bump to 2.2.13 due to modified namespace
 		// Blame HoD
 		var minVer = new Version("2.2.13");
-		if (new Version(system.Mod.Info.Version) < minVer) {
-			delayedMessages.Add(new DelayedMessage($"[BetterEr Prospecting] Please update HydrateOrDietrade to at least {minVer.ToString()} for aquifer support"));
-			return false;
-		}
+		if (new Version(system.Mod.Info.Version) >= minVer) return true;
+		delayedMessages.Add(new DelayedMessage($"[BetterEr Prospecting] Please update HydrateOrDietrade to at least {minVer.ToString()} for aquifer support"));
+		return false;
 
-		return true;
 	}
 	#endregion
 

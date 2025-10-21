@@ -17,7 +17,7 @@ using Vintagestory.ServerMods;
 using ModConfig = BetterErProspecting.Config.ModConfig;
 
 namespace BetterErProspecting.Item;
-public partial class ItemBetterErProspectingPick : ItemProspectingPick {
+public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	public static ILogger Logger => BetterErProspect.Logger;
 	ICoreServerAPI sapi;
 	SkillItem[] toolModes;
@@ -145,7 +145,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Handle oneshot here too
-	protected virtual void ProbeVanillaDensity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	private void ProbeVanillaDensity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		if (config.OneShotDensity) {
 			damage = 3;
 			IPlayer byPlayer = (byEntity as EntityPlayer).Player;
@@ -162,8 +162,8 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Modded Density amount-based search. Square with chunkSize radius around current block. Whole mapheight
-	protected virtual void ProbeBlockDensityMode(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
-		damage = 3;
+	private void ProbeBlockDensityMode(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+		damage = config.NewDensityDmg;
 
 		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
@@ -191,7 +191,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Sphere search
-	protected virtual void ProbeProximity(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	private void ProbeProximity(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.ProximityDmg;
 		int radius = config.ProximitySearchRadius;
 
@@ -224,7 +224,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Square radius-based search
-	protected virtual void ProbeStone(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	private void ProbeStone(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.StoneDmg;
 		int walkRadius = config.StoneSearchRadius;
 
@@ -297,7 +297,7 @@ public partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	// Cylinder Search
-	protected virtual void ProbeBorehole(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
+	private void ProbeBorehole(IWorldAccessor world, IPlayer byPlayer, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		damage = config.BoreholeDmg;
 		int radius = config.BoreholeRadius;
 

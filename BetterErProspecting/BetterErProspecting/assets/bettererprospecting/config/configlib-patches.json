@@ -45,6 +45,27 @@
       "weight": 1.2
     },
     {
+      "code": "LinearDensityScaling",
+      "ingui": "Linear density scaling (EXPERIMENTAL)",
+      "type": "boolean",
+      "comment": "Makes vanilla propick readings scale linearly (0-1) instead of the default 0-0.75 range. This affects all propick readings, not just the new density mode. Works instantly. Feedback is appreciated!",
+      "default": false,
+      "weight": 1.25
+    },
+    {
+      "code": "OreDetectionMultiplier",
+      "ingui": "Ore detection radius multiplier (EXPERIMENTAL)",
+      "type": "float",
+      "comment": "Multiplies the sampling radius for ore detection. By default, ores are sampled in 4 chunks around the current position but PPT are calculated as if it was 1 chunk. A value of 1.0 is the current behavior. 0.5 would mean it only checks the current chunk radius. Higher values will make density readings appear too high, while lower values will require sampling every chunk for accuracy. Feedback is appreciated! /reprospect for old readings",
+      "default": 1.0,
+      "range": {
+        "min": 0.5,
+        "max": 2.0,
+        "step": 0.05
+      },
+      "weight": 1.3
+    },
+    {
       "type": "separator",
       "title": "Total Factor toggles. ( Low factor from other mods fixes )",
       "weight": 1.9,

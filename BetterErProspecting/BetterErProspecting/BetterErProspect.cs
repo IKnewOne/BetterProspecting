@@ -15,7 +15,7 @@ namespace BetterErProspecting;
 public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPercentileProvider {
 	public static ILogger Logger { get; private set; }
 	public static ICoreAPI Api { get; private set; }
-	public static Harmony harmony { get; private set; }
+	private static Harmony harmony { get; set; }
 
 	public static event Action ReloadTools;
 
@@ -25,10 +25,7 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 	public void RegisterCalculator<TGenerator>(System.Func<TGenerator, DepositVariant, int, int, double> calculator) where TGenerator : DepositGeneratorBase {
 		CalculatorManager.GeneratorToPercentileCalculator[typeof(TGenerator)] = (genBase, variant, empirical, sampledRadius) => calculator((TGenerator)genBase, variant, empirical, sampledRadius);
 	}
-
-	public override void StartServerSide(ICoreServerAPI api) {
-		base.StartServerSide(api);
-	}
+	
 	public override void Start(ICoreAPI api) {
 		api.Logger.Debug("[BetterErProspecting] Starting...");
 		base.Start(api);
@@ -48,7 +45,7 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 
 		PatchUnpatch();
 
-		RegisterCalculator<DiscDepositGenerator>((dGen, variant, empiricalValue, sampledRadius) => DiscDistributionCalculator.getPercentileOfEmpiricalValue(dGen, variant, empiricalValue, sampledRadius));
+		RegisterCalculator<DiscDepositGenerator>(DiscDistributionCalculator.getPercentileOfEmpiricalValue);
 		api.RegisterItemClass("ItemBetterErProspectingPick", typeof(ItemBetterErProspectingPick));
 	}
 
@@ -63,7 +60,7 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 			setting.AssignSettingValue(ModConfig.Instance);
 
 			string[] settingsToolReload = [nameof(ModConfig.EnableDensityMode), nameof(ModConfig.NewDensityMode), nameof(ModConfig.AddBoreHoleMode), nameof(ModConfig.AddStoneMode), nameof(ModConfig.AddProximityMode)];
-			string[] settingsPatch = [nameof(ModConfig.NewDensityMode)];
+			string[] settingsPatch = [nameof(ModConfig.NewDensityMode), nameof(ModConfig.LinearDensityScaling)];
 
 			if (settingsToolReload.Contains(setting.YamlCode)) {
 				ReloadTools?.Invoke();
@@ -72,12 +69,8 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 			if (settingsPatch.Contains(setting.YamlCode)) {
 				PatchUnpatch();
 			}
-
-
 		};
 	}
-
-
 
 	public override void Dispose() {
 		harmony?.UnpatchAll(Mod.Info.ModID);
@@ -89,10 +82,15 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 	}
 
 	private void PatchUnpatch() {
+		harmony?.UnpatchAll();
+
+		if (ModConfig.Instance.LinearDensityScaling) {
+			harmony?.PatchCategory(nameof(PatchCategory.LinearDensity));
+		}
 	}
 
 	public enum PatchCategory {
-		NewDensityMode
+		LinearDensity
 	}
 }
 

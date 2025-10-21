@@ -11,6 +11,9 @@ public class ModConfig {
 	public bool NewDensityMode = true;
 	public int NewDensityDmg = 3;
 
+	public bool LinearDensityScaling = false;
+	public float OreDetectionMultiplier = 1.0f;
+
 	public bool AddProximityMode = true;
 	public int ProximitySearchRadius = 5;
 	public int ProximityDmg = 2;
@@ -18,7 +21,6 @@ public class ModConfig {
 	public bool UpliftTraceOres = false;
 	public bool UpliftToPoorNoGeneratorFound = true;
 	public bool UpliftAllToPoor = false;
-	public bool UsePercentForUndefinedGenerators = false;
 
 	public bool AddStoneMode = true;
 	public bool StonePercentSearch = true;
