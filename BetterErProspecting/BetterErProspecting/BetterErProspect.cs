@@ -82,7 +82,7 @@ public class BetterErProspect : Vintagestory.API.Common.ModSystem, IGeneratorPer
 	}
 
 	private void PatchUnpatch() {
-		harmony?.UnpatchAll();
+		harmony?.UnpatchAll(Mod.Info.ModID);
 
 		if (ModConfig.Instance.LinearDensityScaling) {
 			harmony?.PatchCategory(nameof(PatchCategory.LinearDensity));
