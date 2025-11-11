@@ -1,0 +1,23 @@
+{
+  "density-block-based": "Sűrűségi keresőmód (nagy hatótávú, statisztikaalapú keresés)",
+  "node": "Telep keresőmód (közepes hatótávú, pontos keresés)",
+  "proximity": "Közelségi keresőmód (rövid hatótávú, pontos keresés)",
+  "borehole": "Fúrólyuk mód (függőleges vonal alapú keresés)",
+  "stone": "Kőzet mód (nagy hatótávú, távolsági kőzetkeresés)",
+  "debug-bad-ppws-key": "[BetterEr Prospecting] Olyan érckulcsot találtunk, ami nem található a ppws kutatható listában. Ez szándékos ? : {0}",
+  "debug-bad-ppws-key-expected": "[BetterEr Prospecting] Várt kulcsok: {0}",
+
+  "closest-ore-is": "A legközelebbi érc {0} blokknyira van!",
+  "closest-ore-not-found": "Nem található érc {0} blokk sugarú körben.",
+  "area-sample": "{0} blokk sugarú területi mintavétel megtörtént:",
+  "no-rocks-near": "Nincs kőzet a közelben",
+  "found-rocks": "A következő kőzettípusok észlelve",
+  "stone-mode-blocks-away": "{0}: {1} blokknyira",
+  
+  "borehole-no-filter": "A fúrólyuk mód nem lett konfigurálva egyik típus keresésére sem",
+  "borehole-sample-upside": "Fúrásminta csak a blokk felső oldaláról vehető",
+  
+  "borehole-sample-taken": "A fúrásminta vétele megtörtént. ",
+  "borehole-not-found": "Nincs találat",
+  "borehole-found": "Észlelve: "
+}
