@@ -1,7 +1,7 @@
 ﻿using System;
 using Vintagestory.ServerMods;
 
-namespace BetterErProspecting;
+namespace BetterErProspecting.Api;
 public interface IGeneratorPercentileProvider {
 	/// <summary>
 	/// Registers a percentile calculator for a generator type.

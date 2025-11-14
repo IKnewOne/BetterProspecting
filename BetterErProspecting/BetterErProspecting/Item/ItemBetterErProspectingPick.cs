@@ -31,7 +31,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		borehole
 	}
 
-	private Dictionary<Mode, ModeData> modeDataStorage = new Dictionary<Mode, ModeData>() {
+	private readonly Dictionary<Mode, ModeData> modeDataStorage = new Dictionary<Mode, ModeData>() {
 		{ Mode.density, new ModeData(Mode.density, "textures/icons/heatmap.svg") },
 		{ Mode.node, new ModeData(Mode.node, "textures/icons/rocks.svg") },
 		{ Mode.proximity, new ModeData(Mode.proximity, "textures/icons/worldmap/spiral.svg") },
@@ -57,7 +57,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	private void GenerateToolModes(ICoreAPI api) {
 		ObjectCacheUtil.Delete(api, "proPickToolModes");
 		toolModes = ObjectCacheUtil.GetOrCreate(api, "proPickToolModes", () => {
-			List<SkillItem> modes = new List<SkillItem>();
+			List<SkillItem> modes = [];
 
 			// Density mode (two possible names, same SkillItem)
 			if (config.EnableDensityMode) {
@@ -99,7 +99,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	}
 
 	public override bool OnBlockBrokenWith(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, float dropQuantityMultiplier = 1) {
-		IPlayer byPlayer = (byEntity as EntityPlayer).Player;
+		IPlayer byPlayer = (byEntity as EntityPlayer)?.Player;
 		int tm = GetToolMode(itemslot, byPlayer, blockSel);
 		int damage = 1;
 
@@ -128,6 +128,8 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 				case Mode.borehole:
 					ProbeBorehole(world, byPlayer, itemslot, blockSel, ref damage);
 					break;
+				default:
+					break;
 			}
 
 		} else {
@@ -148,7 +150,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 	private void ProbeVanillaDensity(IWorldAccessor world, Entity byEntity, ItemSlot itemslot, BlockSelection blockSel, ref int damage) {
 		if (config.OneShotDensity) {
 			damage = 3;
-			IPlayer byPlayer = (byEntity as EntityPlayer).Player;
+			IPlayer byPlayer = (byEntity as EntityPlayer)?.Player;
 
 			if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 				return;
@@ -168,11 +170,10 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
 
-		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
-		if (serverPlayer == null)
+		if (byPlayer is not IServerPlayer serverPlayer)
 			return;
 
-		List<DelayedMessage> delayedMessages = new List<DelayedMessage>();
+		List<DelayedMessage> delayedMessages = [];
 
 		Dictionary<string, int> codeToFoundCount = ProspectingSystem.GenerateBlockData(sapi, blockSel.Position, delayedMessages);
 
@@ -198,8 +199,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		if (!breakIsPropickable(world, byPlayer, blockSel, ref damage))
 			return;
 
-		IServerPlayer serverPlayer = byPlayer as IServerPlayer;
-		if (serverPlayer == null)
+		if (byPlayer is not IServerPlayer serverPlayer)
 			return;
 
 		BlockPos pos = blockSel.Position.Copy();
@@ -248,14 +248,17 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		var cache = new Dictionary<string, string>();
 		api.World.BlockAccessor.WalkBlocks(blockPos.AddCopy(walkRadius, walkRadius, walkRadius), blockEnd,
 			(walkBlock, x, y, z) => {
+				// ReSharper disable once InvertIf
 				if (IsRock(walkBlock, cache, out string key)) {
 					if (config.StonePercentSearch) {
 						int count = rockInfo.GetValueOrDefault(key, 0);
 						rockInfo[key] = ++count;
 					} else {
 						int distance = (int)blockSel.Position.DistanceTo(new BlockPos(x, y, z));
-						if (!rockInfo.ContainsKey(key) || distance < rockInfo[key]) {
-							rockInfo[key] = distance;
+						// ReSharper disable once InvertIf
+						if (!rockInfo.TryGetValue(key, out int value) || distance < value) {
+                            value = distance;
+                            rockInfo[key] = value;
 						}
 					}
 
@@ -334,7 +337,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 
 		BlockPos blockPos = blockSel.Position.Copy();
 
-		this.WalkBlocksCylinder(blockPos, radius, (walkBlock, x, y, z) => {
+		WalkBlocksCylinder(blockPos, radius, (walkBlock, _, _, _) => {
 			if (config.BoreholeScansOre && IsOre(walkBlock, cache, out string fullKey, out string oreKey)) {
 				var oreHandbook = ppws.depositsByCode.GetValueOrDefault(oreKey, null)?.HandbookPageCode;
 				blockKeys.TryAdd(fullKey, oreHandbook);
@@ -355,7 +358,6 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		}
 
 		serverPlayer.SendMessage(GlobalConstants.InfoLogChatGroup, sb.ToString(), EnumChatType.Notification);
-
 		return;
 	}
 
@@ -385,7 +387,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 		remain = (remain + remainingResistance) / 2.2f;
 		return remain;
 	}
-	public override void OnUnloaded(ICoreAPI api) {
+	public override void OnUnloaded(ICoreAPI coreApi) {
 		foreach (var item in modeDataStorage?.Values) { item?.Skill?.Dispose(); }
 		prospectingSystem = null;
 
@@ -395,7 +397,7 @@ public sealed partial class ItemBetterErProspectingPick : ItemProspectingPick {
 			num++;
 		}
 
-		base.OnUnloaded(api);
+		base.OnUnloaded(coreApi);
 	}
 
 }

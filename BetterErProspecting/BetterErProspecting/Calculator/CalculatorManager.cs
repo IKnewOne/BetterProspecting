@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using Vintagestory.ServerMods;
 
-namespace BetterErProspecting;
+namespace BetterErProspecting.Calculator;
 public class CalculatorManager {
 
 	public static readonly Dictionary<Type, Func<DepositGeneratorBase, DepositVariant, int, int, double>> GeneratorToPercentileCalculator = new();

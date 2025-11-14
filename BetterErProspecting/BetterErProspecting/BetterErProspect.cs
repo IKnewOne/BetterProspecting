@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Linq;
+using BetterErProspecting.Api;
+using BetterErProspecting.Calculator;
 using BetterErProspecting.Config;
-using BetterErProspecting.Helper;
 using BetterErProspecting.Item;
 using ConfigLib;
 using HarmonyLib;

@@ -1,4 +1,5 @@
-﻿using Vintagestory.API.Common.CommandAbbr;
+﻿using BetterErProspecting.Calculator;
+using Vintagestory.API.Common.CommandAbbr;
 
 namespace BetterErProspecting.Prospecting;
 
@@ -29,6 +30,9 @@ public class ProspectingSystem : ModSystem {
 	private static ILogger logger => BetterErProspect.Logger;
 	private bool isReprospecting = false;
 	private ICoreServerAPI sapi;
+
+	// For other mods
+	public Double triesPerChunkScaleFactor => config.TriesPerChunkScaleFactor;
 
 	public override void StartServerSide(ICoreServerAPI api) {
 		base.StartServerSide(api);
@@ -231,6 +235,8 @@ public class ProspectingSystem : ModSystem {
 		const int zoneDiameter = 2 * radius;
 		int zoneBlocks = zoneDiameter * zoneDiameter * mapHeight;
 
+		int scaledZoneBlocks = (int)(zoneBlocks / (config.OreCalculationDivider * config.OreCalculationDivider));
+
 		readings = new PropickReading
 		{
 			Position = blockPos.ToVec3d()
@@ -243,7 +249,7 @@ public class ProspectingSystem : ModSystem {
 		foreach (var (oreCode, empiricalAmount) in codeToFoundOre) {
 			var reading = new OreReading
 			{
-				PartsPerThousand = (double)empiricalAmount / zoneBlocks * 1000
+				PartsPerThousand = (double)empiricalAmount / scaledZoneBlocks * 1000
 			};
 
 			DepositVariant variant = ppws.depositsByCode[oreCode];

@@ -11,8 +11,10 @@ public class ModConfig {
 	public bool NewDensityMode = true;
 	public int NewDensityDmg = 3;
 
-	public bool LinearDensityScaling = false;
+	public bool LinearDensityScaling = true;
 	public float OreDetectionMultiplier = 1.0f;
+	public float OreCalculationDivider = 1.0f;
+	public float TriesPerChunkScaleFactor = 0.70f;
 
 	public bool AddProximityMode = true;
 	public int ProximitySearchRadius = 5;

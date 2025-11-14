@@ -1,8 +1,9 @@
 ﻿using System;
+using BetterErProspecting.Config;
 using Vintagestory.API.MathTools;
 using Vintagestory.ServerMods;
 
-namespace BetterErProspecting.Helper;
+namespace BetterErProspecting.Calculator;
 
 
 // The guy that made this says it's fine, and i'm too dumb to do this myself
@@ -21,7 +22,7 @@ public static class DiscDistributionCalculator {
 		float scaleFactor = ((float)sampledRadius * sampledRadius) / 256f; // 2r*2r/32*32 = 4r^2/1024 = r^2/256
 
 		/*float scaledTries = variant.TriesPerChunk * scaleFactor;*/
-		float scaledTries = variant.TriesPerChunk; // I'll keep the factor behaviour as it is for now
+		float scaledTries = variant.TriesPerChunk * ModConfig.Instance.TriesPerChunkScaleFactor;
 
 		// If only one is, its variance will disappear and math will be fine
 		if (dGen.Radius.dist == EnumDistribution.DIRAC && dGen.Thickness.dist == EnumDistribution.DIRAC) {

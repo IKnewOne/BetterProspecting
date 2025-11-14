@@ -1,5 +1,5 @@
 {
-  "version": 21,
+  "version": 23,
   "file": "BetterErProspecting.json",
   "settings": [
     {
@@ -45,12 +45,18 @@
       "weight": 1.2
     },
     {
+      "type": "separator",
+      "title": "Density Readings Scaling",
+      "weight": 2,
+      "collapsible": true
+    },
+    {
       "code": "LinearDensityScaling",
-      "ingui": "Linear density scaling (EXPERIMENTAL)",
+      "ingui": "Linear density scaling",
       "type": "boolean",
       "comment": "Makes vanilla propick readings scale linearly (0-1) instead of the default 0-0.75 range. This affects all propick readings, not just the new density mode. Works instantly. Feedback is appreciated!",
-      "default": false,
-      "weight": 1.25
+      "default": true,
+      "weight": 2.1
     },
     {
       "code": "OreDetectionMultiplier",
@@ -63,12 +69,38 @@
         "max": 2.0,
         "step": 0.05
       },
-      "weight": 1.3
+      "weight": 3.1
+    },
+    {
+      "code": "OreCalculationDivider",
+      "ingui": "Ore calculation radius multiplier (EXPERIMENTAL)",
+      "type": "float",
+      "comment": "Essentially counters the previous multiplier, but acts in reverse. Identical values of both do nothing, but the higher the detection radius, the bigger is the sampling, which might hit 3 good ores chunks and 6 bad chunks. If using non-default, i suggest having this be somewhat lower than previous. You can further refine results to your liking via linear scaling. /reprospect for old readings",
+      "default": 1.0,
+      "range": {
+        "min": 0.5,
+        "max": 2.0,
+        "step": 0.05
+      },
+      "weight": 3.2
+    },
+    {
+      "code": "TriesPerChunkScaleFactor",
+      "ingui": "Tries per chunk scale factor (EXPERIMENTAL)",
+      "type": "float",
+      "comment": "Originally, the game factors in the fact that not all ore discs are generated due to wrong chunk by scaling off rock factor, which is a local attribute. This is a global modifier to try and play off of that. Feedback is appreciated! /reprospect for old readings",
+      "default": 0.7,
+      "range": {
+        "min": 0.05,
+        "max": 1.0,
+        "step": 0.05
+      },
+      "weight": 4.0
     },
     {
       "type": "separator",
       "title": "Total Factor toggles. ( Low factor from other mods fixes )",
-      "weight": 1.9,
+      "weight": 6,
       "collapsible": true
     },
     {
@@ -77,7 +109,7 @@
       "type": "boolean",
       "comment": "Readings only display values above 0.0025 factor. Turning this on will add all those even single-block ores as traces, whereas in base game they wouldn't be registered. I'd recommend against enabling.",
       "default": false,
-      "weight": 1.91
+      "weight": 6.1
     },
     {
       "code": "UpliftToPoorNoGeneratorFound",
@@ -85,7 +117,7 @@
       "type": "boolean",
       "comment": "Only for ores that do not have a registered generator, i.e. Interesting Ore Gen. Requires the Uplift to trace enabled. This would make the PPT values visible, unlike traces. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this.",
       "default": true,
-      "weight": 1.95
+      "weight": 6.2
     },
     {
       "code": "UpliftAllToPoor",
@@ -93,12 +125,12 @@
       "type": "boolean",
       "comment": "Requires the Uplift to trace enabled. This would make the PPT values visible, unlike previously. Can lead to erroneous exaggerations of very low counts of ore/gems but some mods without integration might require this. Highly unrecommended. If enabled, also supercedes and automatically enables the previous setting. Usually the previous feature is enough.",
       "default": false,
-      "weight": 1.96
+      "weight": 6.3
     },
     {
       "type": "separator",
       "title": "Proximity",
-      "weight": 2.0,
+      "weight": 12.0,
       "collapsible": true
     },
     {
@@ -107,7 +139,7 @@
       "type": "boolean",
       "comment": "Enables proximity mode. Looks for closest ore. Sphere-based",
       "default": true,
-      "weight": 2.1
+      "weight": 12.1
     },
     {
       "code": "ProximitySearchRadius",
@@ -119,7 +151,7 @@
         "min": 1,
         "max": 10
       },
-      "weight": 2.2
+      "weight": 12.2
     },
     {
       "code": "ProximityDmg",
@@ -131,12 +163,12 @@
         "min": 1,
         "max": 10
       },
-      "weight": 2.3
+      "weight": 12.3
     },
     {
       "type": "separator",
       "title": "Stone",
-      "weight": 3.0,
+      "weight": 13.0,
       "collapsible": true
     },
     {
@@ -145,7 +177,7 @@
       "type": "boolean",
       "comment": "Enable big range stone search mode with exact distance to block. Sphere-based",
       "default": true,
-      "weight": 3.1
+      "weight": 13.1
     },
     {
       "code": "StonePercentSearch",
@@ -153,7 +185,7 @@
       "type": "boolean",
       "comment": "If enabled, stone mode displays percentage of found rocks relative to total found rocks. Immersion hurrah",
       "default": true,
-      "weight": 3.15
+      "weight": 13.15
     },
     {
       "code": "StoneSearchRadius",
@@ -161,7 +193,7 @@
       "type": "integer",
       "comment": "Stone mode search radius",
       "default": 64,
-      "weight": 3.2
+      "weight": 13.2
     },
     {
       "code": "StoneDmg",
@@ -173,12 +205,12 @@
         "min": 1,
         "max": 10
       },
-      "weight": 3.3
+      "weight": 13.3
     },
     {
       "type": "separator",
       "title": "Borehole",
-      "weight": 4.0,
+      "weight": 14.0,
       "collapsible": true
     },
     {
@@ -187,7 +219,7 @@
       "type": "boolean",
       "comment": "A straight-line mode. Only reports when breaking the top of the block, scans the world until the bottom and reports selected blocks ( Any or both of Ore and Stone blocks )",
       "default": true,
-      "weight": 4.1
+      "weight": 14.1
     },
     {
       "code": "BoreholeDmg",
@@ -199,7 +231,7 @@
         "min": 1,
         "max": 10
       },
-      "weight": 4.2
+      "weight": 14.2
     },
     {
       "code": "BoreholeRadius",
@@ -211,12 +243,12 @@
         "min": 0,
         "max": 10
       },
-      "weight": 4.25
+      "weight": 14.25
     },
     {
       "type": "separator",
       "text": "At least one must be selected",
-      "weight": 4.3
+      "weight": 14.3
     },
     {
       "code": "BoreholeScansOre",
@@ -224,7 +256,7 @@
       "type": "boolean",
       "comment": "Allows borehole to scan ore",
       "default": true,
-      "weight": 4.4
+      "weight": 14.4
     },
     {
       "code": "BoreholeScansStone",
@@ -232,7 +264,7 @@
       "type": "boolean",
       "comment": "Allows borehole to scan stone",
       "default": false,
-      "weight": 4.5
+      "weight": 14.5
     },
     {
       "type": "separator",

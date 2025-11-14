@@ -30,11 +30,7 @@ public partial class ItemBetterErProspectingPick {
 
 		string suffix = suffixSpan.ToString();
 
-		if (specialOreCodeConversion.TryGetValue(suffix, out var value)) {
-			return value;
-		}
-
-		return suffix;
+		return specialOreCodeConversion.GetValueOrDefault(suffix, suffix);
 	}
 
 	public void WalkBlocksCylinder(BlockPos startPos, int radius, Action<Block, int, int, int> onBlock) {
@@ -48,10 +44,9 @@ public partial class ItemBetterErProspectingPick {
 				for (int z = startZ - radius; z <= startZ + radius; z++) {
 					int dx = x - startX;
 					int dz = z - startZ;
-					if (dx * dx + dz * dz <= radius * radius) {
-						var block = ba.GetBlock(new BlockPos(x, y, z));
-						onBlock(block, x, y, z);
-					}
+					if (dx * dx + dz * dz > radius * radius) continue;
+					var block = ba.GetBlock(new BlockPos(x, y, z));
+					onBlock(block, x, y, z);
 				}
 			}
 		}
@@ -70,10 +65,9 @@ public partial class ItemBetterErProspectingPick {
 					int dy = y - startY;
 					int dz = z - startZ;
 
-					if (dx * dx + dy * dy + dz * dz <= radius * radius) {
-						var block = ba.GetBlock(new BlockPos(x, y, z));
-						onBlock(block, x, y, z);
-					}
+					if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+					var block = ba.GetBlock(new BlockPos(x, y, z));
+					onBlock(block, x, y, z);
 				}
 			}
 		}
