@@ -3,18 +3,19 @@
   "modid": "bettererprospecting",
   "name": "BetterEr Prospecting",
   "authors": [
-    "KnewOne",
+    "KnewOne"
+  ],
+  "contributors": [
+    "NeoB",
+    "qua8ion",
+    "The_Revisionist",
+    "Gnomp",
     "jeikobu__",
     "NathanNgo",
     "Shacklebottom",
     "iturtleman",
     "Voragain",
     "PurplePi"
-  ],
-  "contributors": [
-    "NeoB",
-    "qua8ion",
-    "Gnomp"
   ],
   "description": "A compilation of configurable ProPick features.",
   "version": "1.4.0",
