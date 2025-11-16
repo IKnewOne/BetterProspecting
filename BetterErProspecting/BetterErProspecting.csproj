@@ -12,7 +12,7 @@
 		<Private>false</Private>
     </Reference>
     <Reference Include="HydrateOrDiedrate">
-      <HintPath>..\..\..\VSLibs\dlls\HydrateOrDiedrate.dll</HintPath>
+      <HintPath>$(VSLIBS)\dlls\HydrateOrDiedrate.dll</HintPath>
 		<Private>false</Private>
     </Reference>
     <Reference Include="VintagestoryAPI">
